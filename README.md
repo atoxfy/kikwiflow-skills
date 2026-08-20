@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="Kikwiflow logo" width="120" />
+</p>
+
 # kikwiflow-skills
 
 Agent Skills for working with [Kikwiflow](https://kikwiflow.io) process definitions (`.kikwi` files) —

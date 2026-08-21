@@ -13,7 +13,7 @@ Markdown file into context.
 
 ## What is Kikwiflow, and what's a `.kikwi` file?
 
-Kikwiflow is a Java process orchestration engine (workflow/BPM), with one key difference from
+Kikwiflow is a Java process orchestration engine, with one key difference from
 BPMN-based engines (Camunda, Activiti, jBPM): it has no XML and no embedded expression language.
 A process is just a **graph of nodes described in JSON** — a `.kikwi` file — where each node's
 logic (a decision, a task) is a plain Java bean referenced by name. A `.kikwi` file is what a

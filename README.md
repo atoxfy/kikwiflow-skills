@@ -6,7 +6,8 @@
 
 Agent Skills for working with [Kikwiflow](https://kikwiflow.io) process definitions (`.kikwi` files) —
 turning a natural-language spec into a deployable process, turning existing Java code into a
-documentation diagram, and laying either one out for a human to read. Written as portable
+documentation diagram, laying either one out for a human to read, and implementing the real Java
+classes a deployable process still needs. Written as portable
 [Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
 (Markdown + YAML frontmatter), usable with Claude Code, Devin, or any other agent that can load a
 Markdown file into context.
@@ -28,6 +29,7 @@ or more ends.
 | [`model-kikwi-process`](skills/model-kikwi-process/SKILL.md) | Turns a natural-language spec (a user story, a requirements doc) into a **deployable** `.kikwi` — exact engine field names, real bean resolution, deploy-validation checklist. | "model a process for...", "design the flow for...", "create a Kikwiflow process from this spec" |
 | [`document-java-as-kikwi`](skills/document-java-as-kikwi/SKILL.md) | Reads an **existing Java project** and produces a `.kikwi` that documents its business flow — never deployed, rich per-node `kikwi:documentation` (real code excerpts, Mermaid diagrams). | "document this service as `.kikwi`", "map this project's order flow", "diagram how this module works" |
 | [`beautify-kikwi-diagram`](skills/beautify-kikwi-diagram/SKILL.md) | Takes an already-correct `.kikwi` graph (from either skill above) and computes readable `layout` coordinates — non-overlapping cards, minimal edge crossings. Never touches business/schema fields. | "lay out this `.kikwi`", "beautify/reflow/reposition this diagram" |
+| [`implement-kikwi-components`](skills/implement-kikwi-components/SKILL.md) | Takes `model-kikwi-process`'s "components to implement" list (or scans a `.kikwi` directly) and generates the real `TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider` Java classes + unit tests — wired correctly, flagging any unstated business logic instead of guessing it. Never touches the `.kikwi` file. | "implement this process's handlers", "generate the TaskHandler for...", "wire up the beans this `.kikwi` needs" |
 
 New to these skills? [`TUTORIAL.md`](TUTORIAL.md) (also available [in Portuguese](TUTORIAL.pt-br.md)) walks
 through one realistic prompt per skill — what each one does internally, what comes back, a genuine spec gap
@@ -67,12 +69,17 @@ correct" with "does this look good" in the same pass is what produces mistakes i
                           the Kikwiflow visual editor
 ```
 
+`implement-kikwi-components` is a second, independent follow-up to `model-kikwi-process` specifically
+(not to `document-java-as-kikwi` — see that skill's own warning about why). It doesn't chain with
+`beautify-kikwi-diagram` either — the two can run in any order, since one only ever writes Java source
+and the other only ever touches `layout`; neither reads output the other produced.
+
 ## Using with Claude Code
 
 Claude Code auto-discovers skills from a `skills/<name>/SKILL.md` layout — which is exactly how
 this repo is structured, so you can copy the `skills/` directory in as-is:
 
-- **Project-level** (this project only): copy or symlink the three folders under `skills/` into
+- **Project-level** (this project only): copy or symlink the folders under `skills/` into
   the target project's `.claude/skills/` directory.
 - **Personal** (every project): copy them into `~/.claude/skills/` instead.
 
@@ -103,12 +110,19 @@ just the one file you need for a given task is enough; you don't need the whole 
 
 If you're extending or adapting these skills, keep them consistent with each other:
 
-- **Shared vocabulary.** All three skills use the same 15 `.kikwi` node types and the same
+- **Shared vocabulary.** All four skills use the same 15 `.kikwi` node types and the same
   `BOUNDARY_ERROR_HANDLER`-not-`EXCLUSIVE_GATEWAY` rule for business errors. If you add a new node
   type or change a validation rule, update it in every skill that references it, not just one.
+  `implement-kikwi-components`'s node-type → Java-interface table (`TaskHandler`/`AnswerProvider`/
+  `DueDateProvider`/`CorrelationKeysProvider`) is derived from that same vocabulary — a new node type
+  with a `providerType: BEAN` field needs a row there too.
 - **`kikwi:documentation` / `kikwi:documentationLink`** are the two reserved `extensionProperties`
-  keys for rich per-node docs across all three skills — keep their semantics (mutually exclusive,
+  keys for rich per-node docs across all four skills — keep their semantics (mutually exclusive,
   Markdown + Mermaid support) identical everywhere they're mentioned.
+- **`implement-kikwi-components` never edits the `.kikwi` file it reads** — the same read-only-input
+  principle as `beautify-kikwi-diagram`, mirrored onto source code instead of layout. Don't add
+  `.kikwi`-editing guidance to it; a discovered gap in the *model* (not the code) belongs back with
+  `model-kikwi-process` as a new modeling pass, not a side effect of implementing components.
 - **Cross-links use relative paths** (`../<skill-name>/SKILL.md`) so the repo works both as a
   standalone clone and once copied into a `.claude/skills/` directory elsewhere — don't switch
   these to absolute URLs.
@@ -124,7 +138,9 @@ If you're extending or adapting these skills, keep them consistent with each oth
 - **`examples/*.kikwi.json` and `schemas/*.schema.json` must stay valid.** Each construction skill's example
   is real, standalone JSON — validate it (`python3 -c "import json; json.load(open('path'))"`) and against
   its schema in `schemas/` after editing either. If a rule change makes an example non-representative (e.g.
-  a field gets renamed), update the example, not just the prose.
+  a field gets renamed), update the example, not just the prose. `implement-kikwi-components`'s
+  `examples/*.java` aren't compiled by anything in this repo (there's no sample Spring project here) — keep
+  them consistent with the interface signatures in its `SKILL.md` by inspection when either changes.
 
 ## Contributing
 

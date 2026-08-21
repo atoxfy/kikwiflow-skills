@@ -154,7 +154,46 @@ above from being derived by guesswork mixed into the same pass as the graph logi
 
 ---
 
-## 4. Optional: sanity-checking a result
+## 4. Closing the loop: `implement-kikwi-components`
+
+Back in §1, the expense-approval delivery listed one open item: `expenseValidationTaskHandler` needs a
+real `TaskHandler` bean. Handing that same `.kikwi` (or just that one line from the delivery) to
+`implement-kikwi-components` with a prompt like:
+
+> "Implement the components this expense-approval process still needs."
+
+produces a real, compiling Java class — but not a guessed-at validation rule. The `VALIDATE` node's
+`description` was empty; the original spec only ever said "the system validates the data," never *how*.
+Per the skill's "wire correctly, guess nothing" rule, the generated handler is fully wired (the exact
+bean name, the right interface, the right package/testing conventions) but fails loudly instead of
+silently no-op'ing or inventing a plausible-looking rule:
+
+```java
+@Component("expenseValidationTaskHandler")
+public class ExpenseValidationTaskHandler implements TaskHandler {
+    @Override
+    public void handle(ExecutionContext execution) {
+        // TODO(kikwiflow): the source spec only said "the system validates the data" — no concrete
+        // rule was ever stated. Wire the real rule here before this handler is production-ready.
+        throw new UnsupportedOperationException(
+            "expenseValidationTaskHandler: validation rule not yet specified — see TODO above");
+    }
+}
+```
+
+Full example (class + matching unit test):
+[`skills/implement-kikwi-components/examples/`](skills/implement-kikwi-components/examples/). The
+delivery alongside it calls this out as an **open TODO**, the same way `model-kikwi-process` flagged the
+missing rejection path in §1 — the discipline is the same one level down the stack: don't let a generated
+artifact *look* finished when a real decision is still missing.
+
+This skill and `beautify-kikwi-diagram` are both independent follow-ups to `model-kikwi-process` — order
+between them doesn't matter, since one only ever writes Java source and the other only ever touches
+`layout` in the `.kikwi`; neither reads what the other produced.
+
+---
+
+## 5. Optional: sanity-checking a result
 
 Both construction skills' outputs have a structural JSON Schema under [`schemas/`](schemas/) —
 [`kikwi-deploy.schema.json`](schemas/kikwi-deploy.schema.json) for `model-kikwi-process` output,

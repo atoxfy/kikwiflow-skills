@@ -161,7 +161,46 @@ da lógica do grafo.
 
 ---
 
-## 4. Opcional: checagem de sanidade de um resultado
+## 4. Fechando o loop: `implement-kikwi-components`
+
+Voltando à §1, a entrega de aprovação de despesas listou um item em aberto: `expenseValidationTaskHandler`
+precisa de um bean `TaskHandler` real. Entregar esse mesmo `.kikwi` (ou só essa linha da entrega) para a
+`implement-kikwi-components` com um prompt como:
+
+> "Implemente os componentes que esse processo de aprovação de despesas ainda precisa."
+
+produz uma classe Java real, que compila — mas não uma regra de validação inventada. A `description` do
+nó `VALIDATE` estava vazia; a spec original só dizia "o sistema valida os dados", nunca *como*. Seguindo a
+regra "conecte certo, não adivinhe nada" da skill, o handler gerado fica totalmente conectado (o nome
+exato do bean, a interface certa, as convenções de pacote/teste do projeto), mas falha alto em vez de
+ficar silenciosamente inerte ou inventar uma regra que parece plausível:
+
+```java
+@Component("expenseValidationTaskHandler")
+public class ExpenseValidationTaskHandler implements TaskHandler {
+    @Override
+    public void handle(ExecutionContext execution) {
+        // TODO(kikwiflow): a spec original só dizia "o sistema valida os dados" — nenhuma regra
+        // concreta foi declarada. Conecte a regra real aqui antes desse handler ir para produção.
+        throw new UnsupportedOperationException(
+            "expenseValidationTaskHandler: regra de validação ainda não especificada — ver TODO acima");
+    }
+}
+```
+
+Exemplo completo (classe + teste unitário correspondente):
+[`skills/implement-kikwi-components/examples/`](skills/implement-kikwi-components/examples/). A entrega
+junto com ele sinaliza isso como um **TODO em aberto**, do mesmo jeito que a `model-kikwi-process` sinalizou
+o caminho de rejeição faltando na §1 — a disciplina é a mesma, um nível abaixo na pilha: não deixar um
+artefato gerado *parecer* pronto quando uma decisão real ainda está faltando.
+
+Essa skill e a `beautify-kikwi-diagram` são dois follow-ups independentes da `model-kikwi-process` — a
+ordem entre elas não importa, já que uma só escreve código-fonte Java e a outra só mexe no `layout` do
+`.kikwi`; nenhuma das duas lê o que a outra produziu.
+
+---
+
+## 5. Opcional: checagem de sanidade de um resultado
 
 As saídas das duas skills de construção têm um JSON Schema estrutural em [`schemas/`](schemas/) —
 [`kikwi-deploy.schema.json`](schemas/kikwi-deploy.schema.json) para a saída da `model-kikwi-process`,

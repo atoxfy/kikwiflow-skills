@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A content-only repository: three portable [Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
+A content-only repository: four portable [Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
 (Markdown + YAML frontmatter, no code, no build system) for working with
 [Kikwiflow](https://kikwiflow.io) process definitions (`.kikwi` files — JSON graphs of nodes, each
 node's logic a plain Java bean referenced by name; no BPMN XML, no embedded expression language).
@@ -18,8 +18,10 @@ Each skill folder follows the same progressive-disclosure layout:
 skills/<name>/
   SKILL.md              # entry point: frontmatter + always-relevant steps
   reference/*.md         # dense lookup material, pulled in only when a step needs it
-                          # (not present for beautify-kikwi-diagram — already lean)
+                          # (only model-kikwi-process and document-java-as-kikwi have this —
+                          #  beautify-kikwi-diagram and implement-kikwi-components are already lean)
   examples/*.kikwi.json  # a complete, valid file to use as a formatting template
+                          # (implement-kikwi-components has examples/*.java instead — see below)
 ```
 
 `schemas/kikwi-deploy.schema.json` and `schemas/kikwi-docs.schema.json` are structural JSON Schemas
@@ -41,26 +43,31 @@ jsonschema.validate(doc, schema)
 "
 ```
 
-Otherwise, "working in this repo" means editing `SKILL.md`/`reference/*.md` prose and JSON examples
-and keeping the three skills consistent with each other, with `TUTORIAL.md`, and with `README.md`.
+Otherwise, "working in this repo" means editing `SKILL.md`/`reference/*.md` prose and JSON/Java examples
+and keeping the four skills consistent with each other, with `TUTORIAL.md`, and with `README.md`.
 
-## The three skills and how they fit together
+## The four skills and how they fit together
 
 | Skill | Starts from | Produces |
 |---|---|---|
 | `model-kikwi-process` | a natural-language spec (user story, requirements) | a **deployable** `.kikwi` — exact engine field names (`ProcessDefinitionDeployRequest`/`FlowNodeDefinition` from `kikwi-model`), real bean resolution, deploy-validation checklist |
 | `document-java-as-kikwi` | an **existing Java project** | a documentation-only `.kikwi` — never deployed, rich per-node `kikwi:documentation` (real code excerpts, Mermaid diagrams) |
 | `beautify-kikwi-diagram` | an already-correct `.kikwi` from either skill above | the same graph with computed `layout` coordinates only — never touches business/schema fields |
+| `implement-kikwi-components` | `model-kikwi-process`'s "components to implement" list (or a bare `.kikwi`'s dangling `executor`/`providerBean` refs) | real `TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider` Java classes + unit tests — never touches the `.kikwi` |
 
 `model-kikwi-process` and `document-java-as-kikwi` are mirror images (intent → runnable process vs.
 existing code → read-only diagram). Both deliberately leave every node's `layout` zeroed and hand
 off to `beautify-kikwi-diagram` as a separate final pass — mixing "is this graph correct" with
 "does this look good" in one pass is what produces mistakes in both. Don't add layout/coordinate
 guidance to the two construction skills; that's `beautify-kikwi-diagram`'s job alone.
+`implement-kikwi-components` is a second, independent follow-up to `model-kikwi-process` only (never
+`document-java-as-kikwi` — its `executor`/`providerBean` values are descriptive labels, not real
+references) — it can run before, after, or interleaved with `beautify-kikwi-diagram` since the two
+never touch the same artifact.
 
-## Editing conventions (keeping the three skills coherent)
+## Editing conventions (keeping the four skills coherent)
 
-- **Shared vocabulary.** All three skills use the same 15 `.kikwi` node types (`DEFAULT_START_EVENT`,
+- **Shared vocabulary.** All four skills use the same 15 `.kikwi` node types (`DEFAULT_START_EVENT`,
   `DEFAULT_END_EVENT`, `EXECUTABLE_TASK`, `EXTERNAL_TASK`, `EXCLUSIVE_GATEWAY`, `PARALLEL_GATEWAY`,
   `JOIN_GATEWAY`, `BOUNDARY_INTERRUPTIVE_TIMER`, `BOUNDARY_NON_INTERRUPTIVE_TIMER`,
   `BOUNDARY_ERROR_HANDLER`, `BOUNDARY_INTERRUPTIVE_CATCH_EVENT`, `TIMER_TASK`, `EVENT_CATCHER`,
@@ -71,7 +78,14 @@ guidance to the two construction skills; that's `beautify-kikwi-diagram`'s job a
   every skill that references it, not just one.
 - **`kikwi:documentation` / `kikwi:documentationLink`** are the two reserved `extensionProperties`
   keys for rich per-node docs (Markdown + Mermaid), mutually exclusive in the modeler's editing UI —
-  keep their semantics identical across all three skills.
+  keep their semantics identical across all four skills.
+- **`implement-kikwi-components` is the only skill that writes to the target project's source tree**;
+  its golden rule ("wire correctly, guess nothing" — see its SKILL.md) is deliberately stricter than
+  the other three's gap-handling language, because a generated Java class that silently guesses wrong
+  is a shipped bug, not just a documented assumption. Its node-type → interface table
+  (`TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider`) and the
+  `ExecutionContext`-vs-`EvaluationContext` distinction must stay in sync with `model-kikwi-process`'s
+  own `providerType: BEAN` guidance if either changes.
 - **Deliberate schema divergence between the two construction skills is intentional, not a bug**:
   `model-kikwi-process`'s `outgoing` (`SequenceFlowDefinition`) has no `transitionType` and no
   per-edge `extensionProperties` (its output must actually deploy, so it follows the engine's real

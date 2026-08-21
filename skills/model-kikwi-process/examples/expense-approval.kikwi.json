@@ -1,0 +1,91 @@
+{
+  "key": "expense-approval",
+  "name": "Expense Approval",
+  "description": "An expense report is validated, then routed for manager approval; if there's no response within 48h, it escalates to finance.",
+  "sla": "",
+  "defaultStartPoint": "START",
+  "flowNodes": {
+    "START": {
+      "id": "START",
+      "name": "Expense Submitted",
+      "type": "DEFAULT_START_EVENT",
+      "description": "",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-1", "name": "", "description": "", "targetNodeId": "VALIDATE", "isDefault": false, "handlesNull": false }
+      ],
+      "extensionProperties": {},
+      "layout": { "x": 0, "y": 0 }
+    },
+    "VALIDATE": {
+      "id": "VALIDATE",
+      "name": "Validate Expense Data",
+      "type": "EXECUTABLE_TASK",
+      "description": "",
+      "executor": "expenseValidationTaskHandler",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-2", "name": "", "description": "", "targetNodeId": "AWAIT_APPROVAL", "isDefault": false, "handlesNull": false }
+      ],
+      "extensionProperties": {},
+      "layout": { "x": 0, "y": 0 }
+    },
+    "AWAIT_APPROVAL": {
+      "id": "AWAIT_APPROVAL",
+      "name": "Await Manager Approval",
+      "type": "EXTERNAL_TASK",
+      "description": "",
+      "commitBefore": true,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-3", "name": "", "description": "", "targetNodeId": "APPROVED", "isDefault": false, "handlesNull": false }
+      ],
+      "boundaryEventIds": ["ESCALATE_TIMER"],
+      "extensionProperties": {},
+      "layout": { "x": 0, "y": 0 }
+    },
+    "ESCALATE_TIMER": {
+      "id": "ESCALATE_TIMER",
+      "name": "48h No Response",
+      "type": "BOUNDARY_INTERRUPTIVE_TIMER",
+      "description": "",
+      "attachedToRef": "AWAIT_APPROVAL",
+      "providerType": "STATIC",
+      "staticValue": "PT48H",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-4", "name": "", "description": "", "targetNodeId": "AWAIT_FINANCE_REVIEW", "isDefault": false, "handlesNull": false }
+      ],
+      "extensionProperties": {},
+      "layout": { "x": 0, "y": 0 }
+    },
+    "AWAIT_FINANCE_REVIEW": {
+      "id": "AWAIT_FINANCE_REVIEW",
+      "name": "Await Finance Review (Escalated)",
+      "type": "EXTERNAL_TASK",
+      "description": "",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-5", "name": "", "description": "", "targetNodeId": "APPROVED", "isDefault": false, "handlesNull": false }
+      ],
+      "extensionProperties": {},
+      "layout": { "x": 0, "y": 0 }
+    },
+    "APPROVED": {
+      "id": "APPROVED",
+      "name": "Expense Approved",
+      "type": "DEFAULT_END_EVENT",
+      "description": "",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [],
+      "extensionProperties": {},
+      "layout": { "x": 0, "y": 0 }
+    }
+  },
+  "extensionProperties": {}
+}

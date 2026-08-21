@@ -1,0 +1,189 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kikwiflow/kikwiflow-skills/schemas/kikwi-deploy.schema.json",
+  "title": "Kikwiflow deploy-grade process definition",
+  "$comment": "Structural companion to skills/model-kikwi-process — matches ProcessDefinitionDeployRequest/FlowNodeDefinition/SequenceFlowDefinition as transcribed in that skill's reference/node-types.md. This schema catches shape errors (missing required fields, wrong types, unknown fields, bad enum values) but does NOT encode the full semantic rule set from reference/validation-checklist.md — things like 'at most one isDefault edge per gateway', 'flowNodes key must equal node id', 'every node reachable from defaultStartPoint', or per-providerType conditional field requirements beyond what's modeled below. Run the checklist by hand (or with an agent) in addition to validating against this schema.",
+  "type": "object",
+  "required": ["key", "name", "defaultStartPoint", "flowNodes"],
+  "additionalProperties": false,
+  "properties": {
+    "key": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "sla": { "type": "string" },
+    "defaultStartPoint": { "type": "string", "minLength": 1 },
+    "extensionProperties": { "type": "object" },
+    "flowNodes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/flowNode" }
+    }
+  },
+  "definitions": {
+    "nodeType": {
+      "enum": [
+        "DEFAULT_START_EVENT",
+        "DEFAULT_END_EVENT",
+        "EXECUTABLE_TASK",
+        "EXTERNAL_TASK",
+        "EXCLUSIVE_GATEWAY",
+        "PARALLEL_GATEWAY",
+        "JOIN_GATEWAY",
+        "BOUNDARY_INTERRUPTIVE_TIMER",
+        "BOUNDARY_NON_INTERRUPTIVE_TIMER",
+        "BOUNDARY_ERROR_HANDLER",
+        "BOUNDARY_INTERRUPTIVE_CATCH_EVENT",
+        "TIMER_TASK",
+        "EVENT_CATCHER",
+        "EVENT_THROWER",
+        "CALL_ACTIVITY_COORDINATOR"
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "sequenceFlow": {
+      "type": "object",
+      "required": ["id", "targetNodeId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "targetNodeId": { "type": "string", "minLength": 1 },
+        "isDefault": { "type": "boolean" },
+        "handlesNull": { "type": "boolean" },
+        "expectedAnswer": { "type": ["string", "null"] },
+        "positionHandlers": { "type": "array" }
+      }
+    },
+    "retryPolicy": {
+      "type": "object",
+      "required": ["strategy"],
+      "properties": {
+        "strategy": { "enum": ["LINEAR", "EXPONENTIAL_BACKOFF"] },
+        "maxRetries": { "type": "integer" },
+        "initialInterval": { "type": "string" },
+        "multiplier": { "type": "number" },
+        "maxInterval": { "type": "string" },
+        "intervals": { "type": "array", "items": { "type": "string" } }
+      },
+      "if": { "properties": { "strategy": { "const": "LINEAR" } } },
+      "then": { "required": ["intervals"] },
+      "else": { "required": ["initialInterval"] }
+    },
+    "schedulePolicy": {
+      "type": "object",
+      "required": ["type"],
+      "properties": {
+        "type": { "enum": ["RATE_DURATION", "FIXED_DATES", "CRON"] },
+        "expression": { "type": "string" },
+        "fixedDates": { "type": "array", "items": { "type": "string" } },
+        "maxOccurrences": { "type": ["integer", "null"] }
+      }
+    },
+    "flowNode": {
+      "type": "object",
+      "required": ["id", "name", "type", "outgoing"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/definitions/nodeType" },
+        "description": { "type": "string" },
+        "commitBefore": { "type": "boolean" },
+        "commitAfter": { "type": "boolean" },
+        "outgoing": { "type": "array", "items": { "$ref": "#/definitions/sequenceFlow" } },
+        "extensionProperties": { "type": "object" },
+        "layout": { "$ref": "#/definitions/layout" },
+        "boundaryEventIds": { "type": "array", "items": { "type": "string" } },
+        "attachedToRef": { "type": "string" },
+        "executor": { "type": "string" },
+        "retryPolicy": { "$ref": "#/definitions/retryPolicy" },
+        "providerType": { "type": "string" },
+        "providerBean": { "type": "string" },
+        "providerVariable": { "type": "string" },
+        "defaultFlow": { "type": "string" },
+        "targetJoinId": { "type": "string" },
+        "sourceSplitId": { "type": "string" },
+        "staticValue": { "type": "string" },
+        "staticKey": { "type": "string" },
+        "keyPrefix": { "type": "string" },
+        "keySuffix": { "type": "string" },
+        "displayNamePrefix": { "type": "string" },
+        "displayNameSuffix": { "type": "string" },
+        "correlationTemplates": { "type": "array" },
+        "schedulePolicy": { "$ref": "#/definitions/schedulePolicy" },
+        "errorCode": { "type": ["string", "null"] },
+        "catchType": { "enum": ["STANDALONE", "GROUP"] },
+        "matchPolicy": { "enum": ["ALL", "ANY"] },
+        "calledElement": { "type": "string" },
+        "collectionVariable": { "type": "string" },
+        "elementVariable": { "type": "string" },
+        "iterationMode": { "enum": ["PARALLEL", "SEQUENTIAL", null] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "EXECUTABLE_TASK" } }, "required": ["type"] },
+          "then": { "required": ["executor"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "EXCLUSIVE_GATEWAY" } }, "required": ["type"] },
+          "then": { "required": ["providerType"], "properties": { "providerType": { "enum": ["BEAN", "VARIABLE"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "PARALLEL_GATEWAY" } }, "required": ["type"] },
+          "then": { "required": ["targetJoinId"] }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["BOUNDARY_INTERRUPTIVE_TIMER", "BOUNDARY_NON_INTERRUPTIVE_TIMER", "BOUNDARY_ERROR_HANDLER", "BOUNDARY_INTERRUPTIVE_CATCH_EVENT"] }
+            },
+            "required": ["type"]
+          },
+          "then": { "required": ["attachedToRef"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "BOUNDARY_NON_INTERRUPTIVE_TIMER" } }, "required": ["type"] },
+          "then": { "required": ["schedulePolicy"] }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["BOUNDARY_INTERRUPTIVE_TIMER", "TIMER_TASK"] }
+            },
+            "required": ["type"]
+          },
+          "then": { "required": ["providerType"], "properties": { "providerType": { "enum": ["STATIC", "VARIABLE", "BEAN"] } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["EVENT_CATCHER", "EVENT_THROWER", "BOUNDARY_INTERRUPTIVE_CATCH_EVENT"] }
+            },
+            "required": ["type"]
+          },
+          "then": { "required": ["providerType"], "properties": { "providerType": { "enum": ["STATIC", "VARIABLE", "BEAN", "TEMPLATE"] } } }
+        },
+        {
+          "if": { "properties": { "type": { "const": "EVENT_CATCHER" } }, "required": ["type"] },
+          "then": { "required": ["catchType"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "CALL_ACTIVITY_COORDINATOR" } }, "required": ["type"] },
+          "then": { "required": ["calledElement"] }
+        },
+        {
+          "if": { "properties": { "type": { "enum": ["DEFAULT_END_EVENT"] } }, "required": ["type"] },
+          "then": { "properties": { "outgoing": { "maxItems": 0 } } }
+        }
+      ]
+    }
+  }
+}

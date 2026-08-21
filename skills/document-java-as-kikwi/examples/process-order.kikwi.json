@@ -1,0 +1,118 @@
+{
+  "key": "process-order",
+  "name": "Process Order",
+  "description": "Documents the flow implemented in com.company.orders.OrderController/OrderService.",
+  "extensionProperties": {},
+  "sla": "",
+  "defaultStartPoint": "START",
+  "flowNodes": {
+    "START": {
+      "id": "START",
+      "name": "Order Received",
+      "description": "HTTP POST /orders request arrives at OrderController.",
+      "type": "DEFAULT_START_EVENT",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-1", "name": "", "targetNodeId": "VALIDATE_ORDER", "transitionType": "automated", "isDefault": false, "extensionProperties": {} }
+      ],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {}
+    },
+    "VALIDATE_ORDER": {
+      "id": "VALIDATE_ORDER",
+      "name": "Validate Order",
+      "description": "Validates items, stock, and customer data.",
+      "type": "EXECUTABLE_TASK",
+      "executor": "orderServiceValidateOrder",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-2", "name": "", "targetNodeId": "DECIDE_PAYMENT_METHOD", "transitionType": "automated", "isDefault": false, "extensionProperties": {} }
+      ],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {
+        "source.class": "com.company.orders.OrderService",
+        "source.method": "validateOrder(Order order)",
+        "source.file": "src/main/java/com/company/orders/OrderService.java:30",
+        "kikwi:documentation": "Checks item availability against `InventoryService` and rejects orders whose shipping address falls outside a supported region.\n\n```java\npublic void validateOrder(Order order) {\n    if (!inventoryService.hasStock(order.getItems())) {\n        throw new OrderValidationException(\"OUT_OF_STOCK\");\n    }\n    if (!shippingZones.contains(order.getAddress().getRegion())) {\n        throw new OrderValidationException(\"UNSUPPORTED_REGION\");\n    }\n}\n```"
+      }
+    },
+    "DECIDE_PAYMENT_METHOD": {
+      "id": "DECIDE_PAYMENT_METHOD",
+      "name": "Payment Method?",
+      "description": "Decides between upfront (synchronous call to the gateway) and installments (async approval flow).",
+      "type": "EXCLUSIVE_GATEWAY",
+      "providerType": "VARIABLE",
+      "providerVariable": "paymentMethod",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-3", "name": "", "targetNodeId": "CHARGE_PAYMENT_GATEWAY", "transitionType": "automated", "expectedAnswer": "UPFRONT", "isDefault": false, "extensionProperties": {} },
+        { "id": "flow-4", "name": "", "targetNodeId": "CHARGE_PAYMENT_GATEWAY", "transitionType": "automated", "isDefault": true, "extensionProperties": {} }
+      ],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {
+        "source.class": "com.company.orders.OrderService",
+        "source.method": "if (order.getPaymentMethod() == PaymentMethod.UPFRONT) { ... }"
+      }
+    },
+    "CHARGE_PAYMENT_GATEWAY": {
+      "id": "CHARGE_PAYMENT_GATEWAY",
+      "name": "Await Payment Gateway Confirmation",
+      "description": "Sends the charge to the external gateway and waits for an asynchronous confirmation callback.",
+      "type": "EXTERNAL_TASK",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-5", "name": "", "targetNodeId": "ORDER_CONFIRMED", "transitionType": "automated", "isDefault": false, "extensionProperties": {} }
+      ],
+      "boundaryEventIds": ["PAYMENT_DECLINED_CATCH"],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {
+        "source.integration": "webhook PaymentGatewayCallbackController.onPaymentConfirmed",
+        "kikwi:documentation": "More than one system is involved in this round trip, so the interaction is documented as a sequence diagram instead of prose:\n\n```mermaid\nsequenceDiagram\n    participant OS as OrderService\n    participant PG as Payment Gateway\n    participant WH as PaymentGatewayCallbackController\n    OS->>PG: POST /charges (orderId, amount)\n    PG-->>OS: 202 Accepted (charge queued)\n    Note over OS: Flow waits here (EXTERNAL_TASK)\n    PG->>WH: webhook onPaymentConfirmed(orderId)\n    WH->>OS: resumes flow -> ORDER_CONFIRMED\n```"
+      }
+    },
+    "PAYMENT_DECLINED_CATCH": {
+      "id": "PAYMENT_DECLINED_CATCH",
+      "name": "Payment Declined (Webhook)",
+      "description": "Cancels the wait when the gateway sends a decline webhook, correlated by order id. Has no box of its own in the diagram — the editor draws this as a row inside the 'Await Payment Gateway Confirmation' card (see beautify-kikwi-diagram); the layout.x/y below only exists because the field is required by the schema, not because it occupies its own visual space.",
+      "type": "BOUNDARY_INTERRUPTIVE_CATCH_EVENT",
+      "attachedToRef": "CHARGE_PAYMENT_GATEWAY",
+      "providerType": "VARIABLE",
+      "providerVariable": "orderId",
+      "keyPrefix": "PAYMENT_DECLINED_",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [
+        { "id": "flow-6", "name": "", "targetNodeId": "ORDER_CANCELED", "transitionType": "automated", "isDefault": false, "extensionProperties": {} }
+      ],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {
+        "source.class": "com.company.orders.PaymentGatewayCallbackController",
+        "source.method": "onPaymentDeclined(String orderId)"
+      }
+    },
+    "ORDER_CONFIRMED": {
+      "id": "ORDER_CONFIRMED",
+      "name": "Order Confirmed",
+      "type": "DEFAULT_END_EVENT",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {}
+    },
+    "ORDER_CANCELED": {
+      "id": "ORDER_CANCELED",
+      "name": "Order Canceled",
+      "type": "DEFAULT_END_EVENT",
+      "commitBefore": false,
+      "commitAfter": false,
+      "outgoing": [],
+      "layout": { "x": 0, "y": 0 },
+      "extensionProperties": {}
+    }
+  }
+}

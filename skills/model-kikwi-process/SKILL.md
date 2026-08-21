@@ -20,6 +20,15 @@ description: >
 > documenting an *existing* Java project as a `.kikwi` instead of modeling one from intent — and
 > [`beautify-kikwi-diagram`](../beautify-kikwi-diagram/SKILL.md), the separate follow-up pass that
 > computes readable `layout` coordinates once this skill's graph is structurally done.
+>
+> Bundled reference material, loaded on demand as each step below points to it:
+> [`reference/node-types.md`](reference/node-types.md) (full node type catalog, Step 3) and
+> [`reference/validation-checklist.md`](reference/validation-checklist.md) (deploy-validity checklist,
+> Step 6). A worked example lives at
+> [`examples/expense-approval.kikwi.json`](examples/expense-approval.kikwi.json).
+>
+> New here? See the [repo tutorial](../../TUTORIAL.md) for a full worked prompt → output walkthrough,
+> including chaining this skill's output into `beautify-kikwi-diagram`.
 
 ## What Kikwiflow is (context needed before you start)
 
@@ -42,10 +51,12 @@ visual editor). This skill goes the other way and its output **is meant to becom
 - `executor` / `providerBean` values should, wherever possible, be resolved against beans that **actually
   exist** in the target project (see Step 4). Where no matching bean exists, that's not a blocker — it's a
   concrete, named TODO you hand back at the end (Step 7), not something to gloss over.
-- The JSON must use the **exact field names** the engine's Jackson mapping expects (Step 2/3 below are
-  transcribed directly from `kikwi-model`'s `record`s, not paraphrased from prose docs) and pass real
-  deploy-time validation (Step 6 is grounded in `kikwi-core`'s `DeployValidator` source, split explicitly
-  between what actually blocks a deploy today and what doesn't but will still break the process at runtime).
+- The JSON must use the **exact field names** the engine's Jackson mapping expects (Step 2, and
+  [`reference/node-types.md`](reference/node-types.md), are transcribed directly from `kikwi-model`'s
+  `record`s, not paraphrased from prose docs) and pass real deploy-time validation
+  ([`reference/validation-checklist.md`](reference/validation-checklist.md) is grounded in `kikwi-core`'s
+  `DeployValidator` source, split explicitly between what actually blocks a deploy today and what doesn't but
+  will still break the process at runtime).
 
 ## Step 1 — Read the spec and build the flow skeleton
 
@@ -215,9 +226,10 @@ There is **no `transitionType` field and no `extensionProperties` field on a seq
 `FlowNodeDefinition` (the node), not on `SequenceFlowDefinition` (the edge); including them is harmless if the
 target project's Jackson config ignores unknown properties, but don't rely on that, and don't invent them from
 memory. `isDefault`/`handlesNull` are plain `boolean` (default `false` if omitted); `expectedAnswer` only means
-anything on an `EXCLUSIVE_GATEWAY`'s edges (Step 3). A `positionHandlers` field (waypoints for the connector
-line's visual bend points) exists too — purely cosmetic, safe to omit. Every node type other than
-`EXCLUSIVE_GATEWAY`/`PARALLEL_GATEWAY` should declare **at most one** entry in `outgoing`.
+anything on an `EXCLUSIVE_GATEWAY`'s edges (see [`reference/node-types.md`](reference/node-types.md)). A
+`positionHandlers` field (waypoints for the connector line's visual bend points) exists too — purely cosmetic,
+safe to omit. Every node type other than `EXCLUSIVE_GATEWAY`/`PARALLEL_GATEWAY` should declare **at most one**
+entry in `outgoing`.
 
 (Note: a companion documentation-only spec — used by [`document-java-as-kikwi`](../document-java-as-kikwi/SKILL.md) —
 does include `transitionType` and per-edge `extensionProperties`. That's a deliberate divergence, not an
@@ -237,101 +249,12 @@ don't assume a real deploy target reads or tolerates them.)
 
 ## Step 3 — Node type catalog and required fields
 
-Field names below are transcribed from the actual `record`s in `kikwi-model` — not the prose docs, which can
-drift.
-
-| `type` | Fields beyond the common set | Notes |
-|---|---|---|
-| `DEFAULT_START_EVENT` | — | Exactly one `outgoing`. |
-| `DEFAULT_END_EVENT` | — | `outgoing` always empty. One per distinct terminal outcome the spec names. |
-| `EXECUTABLE_TASK` | `executor` (string), `retryPolicy` (optional, see below) | Synchronous in-process logic. `boundaryEventIds` allowed. |
-| `EXTERNAL_TASK` | — (no `executor`) | Waits on something outside the engine's direct control. `boundaryEventIds` allowed. |
-| `EXCLUSIVE_GATEWAY` | `providerType` (`BEAN`/`VARIABLE`), `providerBean`, `providerVariable`, `defaultFlow` (informational) | See routing rules below. No `boundaryEventIds`. |
-| `PARALLEL_GATEWAY` | `targetJoinId` | Opens simultaneous branches. No `boundaryEventIds`. |
-| `JOIN_GATEWAY` | `sourceSplitId` (informational) | Closes branches. Reached only via a `PARALLEL_GATEWAY`'s `targetJoinId`. |
-| `BOUNDARY_INTERRUPTIVE_TIMER` | `attachedToRef`, `providerType` (`STATIC`/`VARIABLE`/`BEAN`), `staticValue`/`providerVariable`/`providerBean` matching that type | Cancels the parent's wait when it fires. |
-| `BOUNDARY_NON_INTERRUPTIVE_TIMER` | `attachedToRef`, `schedulePolicy` (see below) | Only notifies, doesn't cancel. |
-| `BOUNDARY_ERROR_HANDLER` | `attachedToRef`, `errorCode` (optional — omitted means wildcard) | Catches a business error from the parent. |
-| `BOUNDARY_INTERRUPTIVE_CATCH_EVENT` | `attachedToRef`, correlation fields (see below) | Cancels the parent via external correlation, not a deadline. |
-| `TIMER_TASK` | `providerType` (`STATIC`/`VARIABLE`/`BEAN`), `staticValue`/`providerVariable`/`providerBean` | A deadline as the flow's own next step. `boundaryEventIds` allowed. |
-| `EVENT_CATCHER` | `catchType` (`STANDALONE`/`GROUP`), `matchPolicy` (`ALL`/`ANY`, only meaningful in `GROUP`), correlation fields (see below) | Reactive wait for a correlation key. `boundaryEventIds` allowed. |
-| `EVENT_THROWER` | Correlation fields (see below) | Fires a correlation key outward. No `boundaryEventIds`. |
-| `CALL_ACTIVITY_COORDINATOR` | `calledElement`, `collectionVariable`/`elementVariable` (optional, batch only), `iterationMode` (`PARALLEL`/`SEQUENTIAL`, `null` behaves as `PARALLEL`) | Delegates to another process. `boundaryEventIds` allowed. |
-
-### Correlation fields (shared shape — `EVENT_CATCHER`, `EVENT_THROWER`, `BOUNDARY_INTERRUPTIVE_CATCH_EVENT`)
-
-All three implement the same `providerType` contract, now with **four** options (one more than the timer
-provider types):
-
-| `providerType` | Required field(s) |
-|---|---|
-| `STATIC` | `staticKey` (a fixed string — not `staticValue`, that name is reserved for timer due-dates) |
-| `VARIABLE` | `providerVariable` |
-| `BEAN` | `providerBean` — must resolve to a registered `CorrelationKeysProvider` bean |
-| `TEMPLATE` | `correlationTemplates` — a list of `{ keySegments, displayNameSegments }`, built for scenarios where the correlation key is assembled from multiple fixed/variable segments rather than one field |
-
-`keyPrefix`/`keySuffix`/`displayNamePrefix`/`displayNameSuffix` are optional cosmetic/technical modifiers on
-top of whichever provider type is chosen. `EVENT_CATCHER` in `catchType: GROUP` cannot use `providerType:
-STATIC` — `STATIC` always resolves to exactly one key, which is incompatible with waiting on a group of keys
-(use `VARIABLE`, `BEAN`, or `TEMPLATE` instead).
-
-`EVENT_THROWER` has no fire-and-forget mode: if no active `EVENT_CATCHER` is currently waiting on the key it
-resolves, the node fails outright (same technical retry/incident path as any other node failure) — it does not
-have a `boundaryEventIds` field at all, so a `BOUNDARY_ERROR_HANDLER` isn't an option here. If the spec implies
-best-effort emission ("notify if anyone's listening"), that's a gap to flag in Step 7, not something modelable
-with today's node set.
-
-### Where boundary events can attach (`boundaryEventIds`)
-
-Nodes that accept boundary events declare `"boundaryEventIds": ["ID_1", "ID_2"]`; each boundary node points
-back via `"attachedToRef": "PARENT_ID"`. The allowed combination differs per host type — this table is the
-real allowlist enforced by `kikwi-core`'s `DeployValidator` (see Step 6 for what "enforced" means precisely):
-
-| Parent | Interruptive timer | Non-interruptive timer | Error handler | Interruptive catch event |
-|---|---|---|---|---|
-| `EXECUTABLE_TASK` | ❌ | ✅ | ✅ | ❌ |
-| `EXTERNAL_TASK` | ✅ (by design — see Step 6's gap note) | ✅ (by design) | ❌ | ✅ (by design) |
-| `CALL_ACTIVITY_COORDINATOR` | ✅ | ✅ | ❌ | ❌ |
-| `EVENT_CATCHER` | ✅ | ✅ | ❌ | ❌ |
-| `TIMER_TASK` | ✅ | ✅ | ❌ | ✅ |
-
-The reasoning to keep in mind while modeling: a node that runs a synchronous handler with a real side effect
-(`EXECUTABLE_TASK`) has no safe point to interrupt from outside mid-call, so its only escape hatch is
-`try/catch` (`BOUNDARY_ERROR_HANDLER`). Everything else in this table is a pure wait with no handler of its own
-to protect, so it can be cancelled from outside (timer or event) but has nothing to synchronously `catch` a
-business exception from.
-
-### `EXCLUSIVE_GATEWAY` routing rules
-
-Priority order — get this right, it's the most common source of a subtly wrong model:
-
-1. If the resolved decision is `null` → follow the edge with `handlesNull: true` (declare at most one).
-2. Otherwise → follow the first edge whose `expectedAnswer` matches exactly (string comparison). Don't give two
-   edges of the same gateway the same `expectedAnswer` — the engine takes the first match, so a duplicate is a
-   silently-dead second edge, not an error.
-3. If none match → follow the edge with `isDefault: true` (**at most one** — this one *is* enforced, see Step 6).
-
-**Model both a default and a null-handling edge whenever the spec's decision logic isn't provably exhaustive**
-— an unhandled decision value with no matching edge silently stalls the instance at that gateway.
-
-### `retryPolicy` (optional, on `EXECUTABLE_TASK`)
-
-```json
-{ "strategy": "EXPONENTIAL_BACKOFF", "maxRetries": 3, "initialInterval": "PT10S", "multiplier": 2.0, "maxInterval": "PT5M", "intervals": [] }
-```
-`strategy` is `LINEAR` or `EXPONENTIAL_BACKOFF`. For `LINEAR`, populate `intervals` (a list of duration
-strings, one per retry attempt). For `EXPONENTIAL_BACKOFF`, populate `initialInterval` (and optionally
-`multiplier`/`maxInterval`). If omitted entirely, the node falls back to the engine's built-in default (3
-retries, no config knob to change that default globally).
-
-### `schedulePolicy` (required on `BOUNDARY_NON_INTERRUPTIVE_TIMER`)
-
-```json
-{ "type": "RATE_DURATION", "expression": "PT24H", "fixedDates": [], "maxOccurrences": null }
-```
-`type` is `RATE_DURATION` (recurring interval, needs `expression`), `FIXED_DATES` (needs `fixedDates`, a list
-of ISO timestamps), or `CRON` (a cron `expression`). `maxOccurrences` is an optional 1-based cap on how many
-times the reminder fires (`null` = fires indefinitely as long as the parent node is still waiting).
+Load [`reference/node-types.md`](reference/node-types.md) for the full 15-type catalog (required fields per
+type), the shared correlation-field shape (`EVENT_CATCHER`/`EVENT_THROWER`/`BOUNDARY_INTERRUPTIVE_CATCH_EVENT`),
+the boundary-event attachment allowlist, `EXCLUSIVE_GATEWAY` routing priority, and the `retryPolicy`/
+`schedulePolicy` shapes. Field names there are transcribed from the actual `record`s in `kikwi-model`, not
+prose docs, which can drift — consult it per node type as you build the graph rather than trying to hold the
+whole catalog in mind at once.
 
 ---
 
@@ -382,71 +305,13 @@ arrangement rules. At this stage:
 
 ## Step 6 — Validity checklist
 
-Two tiers, deliberately separated. **A** is what `kikwi-core`'s `DeployValidator` actually checks today — get
-any of these wrong and `POST /process-definitions` throws `InvalidProcessDefinitionException` (or, for some
-gateway/deploy-flag cases, a raw `500` — see the target project's REST testing notes if one exists). **B** is
-*not* checked at deploy time in the current engine version — a definition violating these deploys successfully
-and then breaks, stalls, or silently misbehaves at runtime. Model to satisfy both; only tier A is what "the
-deploy will actually reject" means.
-
-### A — Enforced today (will fail deploy)
-
-- [ ] `EXECUTABLE_TASK.executor`, **if present**, resolves to a registered `TaskHandler` bean.
-- [ ] `EXECUTABLE_TASK.boundaryEventIds` only reference `BOUNDARY_NON_INTERRUPTIVE_TIMER` or
-      `BOUNDARY_ERROR_HANDLER` nodes.
-- [ ] `EXCLUSIVE_GATEWAY.providerType` is `BEAN` or `VARIABLE` (never null/missing).
-- [ ] If `providerType: BEAN` → `providerBean` non-blank and resolves to a registered `AnswerProvider` bean.
-- [ ] If `providerType: VARIABLE` → `providerVariable` non-blank.
-- [ ] An `EXCLUSIVE_GATEWAY` has **at most one** outgoing edge with `isDefault: true`.
-- [ ] `CALL_ACTIVITY_COORDINATOR.calledElement` is non-blank.
-- [ ] `CALL_ACTIVITY_COORDINATOR.elementVariable`, if present, has `collectionVariable` also present.
-- [ ] `CALL_ACTIVITY_COORDINATOR.boundaryEventIds` only reference `BOUNDARY_INTERRUPTIVE_TIMER` or
-      `BOUNDARY_NON_INTERRUPTIVE_TIMER` nodes (no error handler, no catch event).
-- [ ] `EVENT_CATCHER`/`EVENT_THROWER`/`BOUNDARY_INTERRUPTIVE_CATCH_EVENT`: `providerType` is set, and the field
-      required by that type is filled (`staticKey`/`providerVariable`/`providerBean` resolving to a real
-      `CorrelationKeysProvider`/`correlationTemplates` non-empty).
-- [ ] `EVENT_CATCHER` never combines `catchType: GROUP` with `providerType: STATIC`.
-- [ ] `EVENT_CATCHER.boundaryEventIds` only reference `BOUNDARY_INTERRUPTIVE_TIMER` or
-      `BOUNDARY_NON_INTERRUPTIVE_TIMER` nodes.
-- [ ] `BOUNDARY_INTERRUPTIVE_CATCH_EVENT.attachedToRef` points to a node that is `EXTERNAL_TASK` or
-      `TIMER_TASK` (never `EXECUTABLE_TASK`, never anything else).
-- [ ] `TIMER_TASK.boundaryEventIds` only reference `BOUNDARY_INTERRUPTIVE_TIMER`,
-      `BOUNDARY_NON_INTERRUPTIVE_TIMER`, or `BOUNDARY_INTERRUPTIVE_CATCH_EVENT` nodes (no error handler).
-
-### B — Not enforced today, but still get it right
-
-- [ ] `defaultStartPoint` exists in `flowNodes` and is a `DEFAULT_START_EVENT`.
-- [ ] Every `flowNodes` key equals the `"id"` inside that node.
-- [ ] Every `targetNodeId` (in `outgoing` or `targetJoinId`) resolves to an existing node — a dangling
-      reference isn't rejected at deploy, it just fails or does nothing the moment that edge is actually taken.
-- [ ] Every `DEFAULT_END_EVENT` has empty `outgoing`; every `DEFAULT_START_EVENT` has exactly one.
-- [ ] Every node except `EXCLUSIVE_GATEWAY`/`PARALLEL_GATEWAY` has at most one `outgoing` entry.
-- [ ] No two `EXCLUSIVE_GATEWAY` edges share an `expectedAnswer` (the engine takes the first match — a
-      duplicate is a silently unreachable edge, not an error) or `handlesNull: true`.
-- [ ] Every `PARALLEL_GATEWAY` declares `targetJoinId` pointing to an actual `JOIN_GATEWAY` — **this entire
-      family (`PARALLEL_GATEWAY`/`JOIN_GATEWAY`) has zero deploy-time structural validation today**: a
-      `targetJoinId` pointing nowhere, or to the wrong node type, deploys fine and breaks the fan-in at
-      runtime. Double-check it by hand.
-- [ ] Every `JOIN_GATEWAY` is reached **only** via a `PARALLEL_GATEWAY`'s `targetJoinId`, never a plain
-      sequence flow — also unenforced, same reasoning.
-- [ ] `EXTERNAL_TASK.boundaryEventIds` follow the Step 3 table (interruptive timer, non-interruptive timer,
-      interruptive catch event; no error handler) even though — unlike every other host type —
-      **`DeployValidator` has no branch for `EXTERNAL_TASK` at all today**, so nothing stops an incorrectly
-      attached boundary from deploying. The individual boundary node's own `attachedToRef`-target check (where
-      one exists, e.g. `BOUNDARY_INTERRUPTIVE_CATCH_EVENT`) is the only backstop.
-- [ ] `BOUNDARY_INTERRUPTIVE_TIMER`/`TIMER_TASK`'s own `providerType` + matching value field
-      (`staticValue`/`providerVariable`/`providerBean`) are actually filled in — not validated at deploy, fails
-      when the timer is due to fire.
-- [ ] `BOUNDARY_NON_INTERRUPTIVE_TIMER.schedulePolicy` is present with the field its `type` requires — same,
-      unvalidated at deploy.
-- [ ] `BOUNDARY_ERROR_HANDLER.attachedToRef` points to an `EXECUTABLE_TASK` (the only host it makes semantic
-      sense on), and no two handlers on the same parent share an `errorCode` (or both omit it, i.e. two
-      wildcards) — neither is checked today.
-- [ ] `retryPolicy`, if present, has a real `strategy` and the fields that strategy needs
-      (`intervals` for `LINEAR`, `initialInterval` for `EXPONENTIAL_BACKOFF`) — unvalidated at deploy.
-- [ ] Every node in `flowNodes` is reachable from `defaultStartPoint` — no orphaned nodes nothing points to.
-- [ ] Every `executor`/`providerBean` either matches a real bean found in Step 4, or is listed as a component
-      to implement in the delivery (Step 7) — never a silent dangling reference.
+Load [`reference/validation-checklist.md`](reference/validation-checklist.md) before delivering. It's split
+into two deliberately separate tiers: **A**, what `kikwi-core`'s `DeployValidator` actually checks today (get
+any of these wrong and `POST /process-definitions` throws `InvalidProcessDefinitionException`, or for some
+gateway/deploy-flag cases a raw `500`); and **B**, *not* checked at deploy time in the current engine version —
+a definition violating these deploys successfully and then breaks, stalls, or silently misbehaves at runtime.
+Model to satisfy both; only tier A is what "the deploy will actually reject" means, so don't treat a clean
+deploy as proof the model is fully correct.
 
 ---
 
@@ -469,74 +334,24 @@ deploy will actually reject" means.
 
 ---
 
-## Compact reference example
+## Reference example
 
-A short "request needs review, with an SLA that escalates it" shape — enough to show format without repeating a
-full end-to-end process. Use it as a formatting template, not content to copy; the actual flow, names, and
-traceability always come from the real spec. Note every `layout` below is zeroed, per Step 5 — this file would
-still need a `beautify-kikwi-diagram` pass before being handed to a human reader.
-
-```json
-{
-  "key": "expense-approval",
-  "name": "Expense Approval",
-  "description": "An expense report is validated, then routed for manager approval; if there's no response within 48h, it escalates to finance.",
-  "sla": "",
-  "defaultStartPoint": "START",
-  "flowNodes": {
-    "START": {
-      "id": "START", "name": "Expense Submitted", "type": "DEFAULT_START_EVENT", "description": "",
-      "commitBefore": false, "commitAfter": false,
-      "outgoing": [{ "id": "flow-1", "name": "", "description": "", "targetNodeId": "VALIDATE", "isDefault": false, "handlesNull": false }],
-      "extensionProperties": {}, "layout": { "x": 0, "y": 0 }
-    },
-    "VALIDATE": {
-      "id": "VALIDATE", "name": "Validate Expense Data", "type": "EXECUTABLE_TASK", "description": "",
-      "executor": "expenseValidationTaskHandler",
-      "commitBefore": false, "commitAfter": false,
-      "outgoing": [{ "id": "flow-2", "name": "", "description": "", "targetNodeId": "AWAIT_APPROVAL", "isDefault": false, "handlesNull": false }],
-      "extensionProperties": {}, "layout": { "x": 0, "y": 0 }
-    },
-    "AWAIT_APPROVAL": {
-      "id": "AWAIT_APPROVAL", "name": "Await Manager Approval", "type": "EXTERNAL_TASK", "description": "",
-      "commitBefore": true, "commitAfter": false,
-      "outgoing": [{ "id": "flow-3", "name": "", "description": "", "targetNodeId": "APPROVED", "isDefault": false, "handlesNull": false }],
-      "boundaryEventIds": ["ESCALATE_TIMER"],
-      "extensionProperties": {}, "layout": { "x": 0, "y": 0 }
-    },
-    "ESCALATE_TIMER": {
-      "id": "ESCALATE_TIMER", "name": "48h No Response", "type": "BOUNDARY_INTERRUPTIVE_TIMER", "description": "",
-      "attachedToRef": "AWAIT_APPROVAL", "providerType": "STATIC", "staticValue": "PT48H",
-      "commitBefore": false, "commitAfter": false,
-      "outgoing": [{ "id": "flow-4", "name": "", "description": "", "targetNodeId": "AWAIT_FINANCE_REVIEW", "isDefault": false, "handlesNull": false }],
-      "extensionProperties": {}, "layout": { "x": 0, "y": 0 }
-    },
-    "AWAIT_FINANCE_REVIEW": {
-      "id": "AWAIT_FINANCE_REVIEW", "name": "Await Finance Review (Escalated)", "type": "EXTERNAL_TASK", "description": "",
-      "commitBefore": false, "commitAfter": false,
-      "outgoing": [{ "id": "flow-5", "name": "", "description": "", "targetNodeId": "APPROVED", "isDefault": false, "handlesNull": false }],
-      "extensionProperties": {}, "layout": { "x": 0, "y": 0 }
-    },
-    "APPROVED": {
-      "id": "APPROVED", "name": "Expense Approved", "type": "DEFAULT_END_EVENT", "description": "",
-      "commitBefore": false, "commitAfter": false, "outgoing": [],
-      "extensionProperties": {}, "layout": { "x": 0, "y": 0 }
-    }
-  },
-  "extensionProperties": {}
-}
-```
-
-Note the open gap this example would flag in a real delivery (Step 7): the spec fragment above never says what
-happens if the *manager* explicitly rejects the expense (only "no response" is handled, via the timer) — that's
-exactly the kind of load-bearing ambiguity to surface rather than silently omit or silently invent a rejection
-path.
+[`examples/expense-approval.kikwi.json`](examples/expense-approval.kikwi.json) is a complete, valid file for a
+"request needs review, with an SLA that escalates it" shape — an `EXTERNAL_TASK` awaiting manager approval,
+with a `BOUNDARY_INTERRUPTIVE_TIMER` that escalates to finance review after 48h with no response. Use it as a
+formatting template, not content to copy; the actual flow, names, and traceability always come from the real
+spec. Every `layout` in it is zeroed, per Step 5 — it would still need a `beautify-kikwi-diagram` pass before
+being handed to a human reader (see the [repo tutorial](../../TUTORIAL.md) for that pass applied to this exact
+file). The example also illustrates the Step 1 "handle gaps explicitly" rule in practice: the source spec
+fragment it was built from never says what happens if the manager explicitly *rejects* the expense (only "no
+response" is handled, via the timer) — that gap is the kind of load-bearing ambiguity to surface in Step 7
+rather than silently omit or silently invent a rejection path.
 
 ## Where the ground truth lives
 
-This file's field names and Step 6/tier-A checklist were transcribed directly from `kikwi-model`'s
-`record`s (`io.kikwiflow.model.definition.process.elements.*`) and `kikwi-core`'s
-`io.kikwiflow.validation.DeployValidator`, not from prose documentation — the engine's own docs under `docs/`
-are known to drift ahead of what's actually implemented. If the Kikwiflow engine repository is available for
-cross-checking (it usually won't be, from inside a downstream project), those two source locations are the
-authoritative tie-breaker over anything written here, including this file.
+This file's field names and the [validation checklist](reference/validation-checklist.md)'s tier-A rules were
+transcribed directly from `kikwi-model`'s `record`s (`io.kikwiflow.model.definition.process.elements.*`) and
+`kikwi-core`'s `io.kikwiflow.validation.DeployValidator`, not from prose documentation — the engine's own docs
+under `docs/` are known to drift ahead of what's actually implemented. If the Kikwiflow engine repository is
+available for cross-checking (it usually won't be, from inside a downstream project), those two source
+locations are the authoritative tie-breaker over anything written here, including this file.

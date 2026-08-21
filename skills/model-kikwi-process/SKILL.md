@@ -17,9 +17,11 @@ description: >
 # Skill: Model a Kikwiflow process from a natural-language spec
 
 > See also: [`document-java-as-kikwi`](../document-java-as-kikwi/SKILL.md) — the mirror skill, for
-> documenting an *existing* Java project as a `.kikwi` instead of modeling one from intent — and
-> [`beautify-kikwi-diagram`](../beautify-kikwi-diagram/SKILL.md), the separate follow-up pass that
-> computes readable `layout` coordinates once this skill's graph is structurally done.
+> documenting an *existing* Java project as a `.kikwi` instead of modeling one from intent — and two
+> independent follow-up passes over this skill's output (order between them doesn't matter):
+> [`beautify-kikwi-diagram`](../beautify-kikwi-diagram/SKILL.md), which computes readable `layout`
+> coordinates, and [`implement-kikwi-components`](../implement-kikwi-components/SKILL.md), which turns
+> this skill's "components to implement" list into real Java classes.
 >
 > Bundled reference material, loaded on demand as each step below points to it:
 > [`reference/node-types.md`](reference/node-types.md) (full node type catalog, Step 3) and
@@ -321,7 +323,9 @@ deploy as proof the model is fully correct.
 2. **Components to implement** — a short list of any `executor`/`providerBean`/`providerVariable` values that
    don't yet correspond to real code, each with: the bean name used, the interface it needs to implement
    (`TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider`), and which node(s) reference it.
-   Empty list is fine and worth stating explicitly ("everything resolved against existing beans").
+   Empty list is fine and worth stating explicitly ("everything resolved against existing beans"). This list is
+   exactly the input [`implement-kikwi-components`](../implement-kikwi-components/SKILL.md) needs to turn into
+   real Java classes as a follow-up pass — mention it's available if the delivery isn't empty.
 3. **Assumptions and open questions** — every load-bearing gap from Step 1 that you resolved with a
    conservative default instead of getting confirmation, and anything you *did* ask about but is still
    unresolved. Be explicit that these are guesses, not requirements extracted from the spec.

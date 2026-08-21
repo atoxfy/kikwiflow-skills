@@ -29,6 +29,18 @@ or more ends.
 | [`document-java-as-kikwi`](skills/document-java-as-kikwi/SKILL.md) | Reads an **existing Java project** and produces a `.kikwi` that documents its business flow — never deployed, rich per-node `kikwi:documentation` (real code excerpts, Mermaid diagrams). | "document this service as `.kikwi`", "map this project's order flow", "diagram how this module works" |
 | [`beautify-kikwi-diagram`](skills/beautify-kikwi-diagram/SKILL.md) | Takes an already-correct `.kikwi` graph (from either skill above) and computes readable `layout` coordinates — non-overlapping cards, minimal edge crossings. Never touches business/schema fields. | "lay out this `.kikwi`", "beautify/reflow/reposition this diagram" |
 
+New to these skills? [`TUTORIAL.md`](TUTORIAL.md) (also available [in Portuguese](TUTORIAL.pt-br.md)) walks
+through one realistic prompt per skill — what each one does internally, what comes back, a genuine spec gap
+being flagged instead of guessed at, and the `model-kikwi-process` → `beautify-kikwi-diagram` handoff
+applied to a real file.
+
+Each skill's `SKILL.md` is the entry point; dense lookup material (the full node type catalog, the
+validation checklist) lives in that skill's `reference/` folder and is pulled in only when a step actually
+needs it, and each construction skill's `examples/` folder holds a complete, valid `.kikwi` file to use as a
+formatting template. [`schemas/`](schemas/) has a structural JSON Schema per output flavor
+(`kikwi-deploy.schema.json` for `model-kikwi-process`, `kikwi-docs.schema.json` for
+`document-java-as-kikwi`) — a fast first check, not a substitute for the reference checklist.
+
 ### How they fit together
 
 `model-kikwi-process` and `document-java-as-kikwi` are mirror images of each other — one starts
@@ -103,6 +115,16 @@ If you're extending or adapting these skills, keep them consistent with each oth
 - **Layout stays out of the construction skills.** Don't add coordinate-computation guidance to
   `model-kikwi-process` or `document-java-as-kikwi` — that's `beautify-kikwi-diagram`'s job,
   deliberately kept separate (see "How they fit together" above).
+- **`SKILL.md` stays lean; `reference/` holds the lookup material.** The node type catalog and the
+  validation checklist are large, denser tables an agent consults per-node or before delivering — not
+  content it needs held in mind on every turn — so they live in each construction skill's `reference/`
+  folder, pointed to from the relevant `SKILL.md` step. If you add a node type or change a checklist rule,
+  update the `reference/` file (and its sibling in the other construction skill, per the point above), not
+  a copy pasted back into `SKILL.md`.
+- **`examples/*.kikwi.json` and `schemas/*.schema.json` must stay valid.** Each construction skill's example
+  is real, standalone JSON — validate it (`python3 -c "import json; json.load(open('path'))"`) and against
+  its schema in `schemas/` after editing either. If a rule change makes an example non-representative (e.g.
+  a field gets renamed), update the example, not just the prose.
 
 ## Contributing
 

@@ -1,0 +1,130 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://github.com/kikwiflow/kikwiflow-skills/schemas/kikwi-docs.schema.json",
+  "title": "Kikwiflow documentation-only process definition",
+  "$comment": "Structural companion to skills/document-java-as-kikwi. Same 15 node types as schemas/kikwi-deploy.schema.json, but the edge shape keeps 'transitionType' and per-edge 'extensionProperties' (this output is never deployed, so the deploy-grade skill's stricter SequenceFlowDefinition shape doesn't apply here — see that skill's Step 2 for why the divergence is deliberate). Catches shape errors only, not the full checklist in reference/validation-checklist.md (e.g. flowNodes key == node id, no duplicate isDefault/handlesNull per gateway, kikwi:documentation and kikwi:documentationLink never both set, every mermaid block being valid Mermaid).",
+  "type": "object",
+  "required": ["key", "name", "defaultStartPoint", "flowNodes"],
+  "additionalProperties": false,
+  "properties": {
+    "key": { "type": "string", "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$" },
+    "name": { "type": "string", "minLength": 1 },
+    "description": { "type": "string" },
+    "sla": { "type": "string" },
+    "defaultStartPoint": { "type": "string", "minLength": 1 },
+    "extensionProperties": { "type": "object" },
+    "flowNodes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/definitions/flowNode" }
+    }
+  },
+  "definitions": {
+    "nodeType": {
+      "enum": [
+        "DEFAULT_START_EVENT",
+        "DEFAULT_END_EVENT",
+        "EXECUTABLE_TASK",
+        "EXTERNAL_TASK",
+        "EXCLUSIVE_GATEWAY",
+        "PARALLEL_GATEWAY",
+        "JOIN_GATEWAY",
+        "BOUNDARY_INTERRUPTIVE_TIMER",
+        "BOUNDARY_NON_INTERRUPTIVE_TIMER",
+        "BOUNDARY_ERROR_HANDLER",
+        "BOUNDARY_INTERRUPTIVE_CATCH_EVENT",
+        "TIMER_TASK",
+        "EVENT_CATCHER",
+        "EVENT_THROWER",
+        "CALL_ACTIVITY_COORDINATOR"
+      ]
+    },
+    "layout": {
+      "type": "object",
+      "required": ["x", "y"],
+      "additionalProperties": false,
+      "properties": {
+        "x": { "type": "number" },
+        "y": { "type": "number" }
+      }
+    },
+    "sequenceFlow": {
+      "type": "object",
+      "required": ["id", "targetNodeId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string" },
+        "description": { "type": "string" },
+        "targetNodeId": { "type": "string", "minLength": 1 },
+        "transitionType": { "type": "string" },
+        "isDefault": { "type": "boolean" },
+        "handlesNull": { "type": "boolean" },
+        "expectedAnswer": { "type": ["string", "null"] },
+        "extensionProperties": { "type": "object" },
+        "positionHandlers": { "type": "array" }
+      }
+    },
+    "flowNode": {
+      "type": "object",
+      "required": ["id", "name", "type", "outgoing"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "$ref": "#/definitions/nodeType" },
+        "description": { "type": "string" },
+        "commitBefore": { "type": "boolean" },
+        "commitAfter": { "type": "boolean" },
+        "outgoing": { "type": "array", "items": { "$ref": "#/definitions/sequenceFlow" } },
+        "extensionProperties": {
+          "type": "object",
+          "$comment": "May carry the reserved keys kikwi:documentation (markdown) and kikwi:documentationLink (URL/path) — mutually exclusive, not enforced by this schema — plus free-form source.* traceability keys (source.class, source.method, source.file, source.integration)."
+        },
+        "layout": { "$ref": "#/definitions/layout" },
+        "boundaryEventIds": { "type": "array", "items": { "type": "string" } },
+        "attachedToRef": { "type": "string" },
+        "executor": { "type": "string" },
+        "providerType": { "type": "string" },
+        "providerBean": { "type": "string" },
+        "providerVariable": { "type": "string" },
+        "targetJoinId": { "type": "string" },
+        "sourceSplitId": { "type": "string" },
+        "staticValue": { "type": "string" },
+        "staticKey": { "type": "string" },
+        "keyPrefix": { "type": "string" },
+        "keySuffix": { "type": "string" },
+        "schedulePolicy": { "type": "object" },
+        "errorCode": { "type": ["string", "null"] },
+        "catchType": { "enum": ["STANDALONE", "GROUP"] },
+        "matchPolicy": { "enum": ["ALL", "ANY"] },
+        "calledElement": { "type": "string" },
+        "collectionVariable": { "type": "string" },
+        "elementVariable": { "type": "string" },
+        "iterationMode": { "enum": ["PARALLEL", "SEQUENTIAL", null] }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "EXCLUSIVE_GATEWAY" } }, "required": ["type"] },
+          "then": { "required": ["providerType"], "properties": { "providerType": { "enum": ["BEAN", "VARIABLE"] } } }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": { "enum": ["BOUNDARY_INTERRUPTIVE_TIMER", "BOUNDARY_NON_INTERRUPTIVE_TIMER", "BOUNDARY_ERROR_HANDLER", "BOUNDARY_INTERRUPTIVE_CATCH_EVENT"] }
+            },
+            "required": ["type"]
+          },
+          "then": { "required": ["attachedToRef"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "CALL_ACTIVITY_COORDINATOR" } }, "required": ["type"] },
+          "then": { "required": ["calledElement"] }
+        },
+        {
+          "if": { "properties": { "type": { "const": "DEFAULT_END_EVENT" } }, "required": ["type"] },
+          "then": { "properties": { "outgoing": { "maxItems": 0 } } }
+        }
+      ]
+    }
+  }
+}

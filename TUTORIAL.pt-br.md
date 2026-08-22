@@ -2,12 +2,13 @@
 
 *[Read this in English](TUTORIAL.md)*
 
-Este tutorial percorre um prompt realista por skill, o que a skill realmente faz com ele internamente, e o
-que volta como resultado — incluindo os dois comportamentos mais fáceis de passar batido só lendo os
-`SKILL.md`: uma skill de construção sinalizando uma lacuna genuína do input em vez de inventar uma resposta,
-e a passagem deliberada em duas etapas de uma skill de construção para a `beautify-kikwi-diagram`. Os
-arquivos completos referenciados abaixo vivem na pasta `examples/` de cada skill — este documento só mostra
-trechos.
+Este tutorial percorre um prompt realista por skill (dois para a `model-kikwi-process`, um por modo), o que
+a skill realmente faz com ele internamente, e o que volta como resultado — incluindo comportamentos mais
+fáceis de passar batido só lendo os `SKILL.md`: uma skill de construção sinalizando uma lacuna genuína do
+input em vez de inventar uma resposta, o modo rascunho da `model-kikwi-process` deixando campos técnicos de
+fora inteiramente em vez de chutá-los, e as passagens deliberadas em várias etapas de uma skill de
+construção para a `beautify-kikwi-diagram`/`implement-kikwi-components`. Os arquivos completos referenciados
+abaixo vivem na pasta `examples/` de cada skill — este documento só mostra trechos.
 
 Pré-requisito: copie `skills/` para `.claude/skills/` no projeto alvo (veja [`README.md`](README.md) para os
 passos exatos) para que o Claude Code descubra as skills.
@@ -68,7 +69,7 @@ Segundo o Step 7, a entrega não é só o JSON — é o arquivo mais:
 - **Premissas e questões em aberto**: *"a spec nunca declara o que acontece se o gestor explicitamente
   rejeitar a despesa — só o timeout de não-resposta está modelado; confirmar se um caminho de rejeição é
   necessário."*
-- Confirmação de que a `beautify-kikwi-diagram` ainda precisa rodar — veja a §3 abaixo.
+- Confirmação de que a `beautify-kikwi-diagram` ainda precisa rodar — veja a §4 abaixo.
 
 Esse é o ponto de a skill sinalizar lacunas em vez de adivinhar: um caminho de rejeição inventado
 silenciosamente aqui pareceria completo e passaria no deploy tranquilamente, e só estaria *errado* na
@@ -76,7 +77,69 @@ primeira vez que um gestor de fato clicasse em rejeitar.
 
 ---
 
-## 2. `document-java-as-kikwi` — código existente → diagrama de documentação
+## 2. `model-kikwi-process` em modo rascunho — esboçando sem detalhe técnico
+
+### Prompt
+
+> "Vamos esboçar um processo de aprovação de crédito: o cliente pede um empréstimo, a gente analisa o
+> crédito, e encaminha pra assinatura de contrato se aprovado ou avisa o cliente se reprovado. Ainda não sei
+> os detalhes técnicos — só quero ver a forma primeiro."
+
+Nenhum projeto alvo é referenciado, e o prompt já diz de cara que os detalhes técnicos não são conhecidos
+ainda — exatamente o sinal que o Step 0 procura.
+
+### O que a skill faz com isso
+
+1. O **Step 0** lê esses sinais — sem codebase no contexto, "ainda não sei os detalhes técnicos" — e escolhe
+   o **modo rascunho** em vez do modo deploy. Ela diz isso explicitamente de cara, em vez de seguir em
+   silêncio como se fosse um pedido normal de nível deploy.
+2. O **Step 1** mapeia linguagem de negócio pra tipos de nó exatamente como na §1 — o modo rascunho não muda
+   *a forma* do grafo, só quanto detalhe técnico fica anexado a ele.
+3. Onde o modo deploy precisaria de `providerType`/`providerBean` no `EXCLUSIVE_GATEWAY`, ou `executor` em
+   cada `EXECUTABLE_TASK`, o modo rascunho **deixa esses campos de fora** em vez de inventar um
+   `providerType: VARIABLE` que parece plausível ou um nome de bean falso — e coloca a decisão em aberto
+   direto na `description` daquele nó, pra um desenvolvedor que for pegar isso depois saber exatamente o
+   que ainda falta resolver.
+4. O **Step 6** valida contra [`schemas/kikwi-draft.schema.json`](schemas/kikwi-draft.schema.json) — só
+   checa que os tipos de nó são reais e que as arestas apontam pra algum lugar, não que algum campo técnico
+   esteja presente.
+5. A entrega do **Step 7** é reformulada: declarada claramente como um **rascunho, não implantável**, com
+   uma lista de "decisões técnicas em aberto" tirada das descrições dos nós — não uma lista de "componentes
+   a implementar", já que ainda não existe nome de bean nenhum pra `implement-kikwi-components` agir em cima.
+
+### Resultado (trecho)
+
+Arquivo completo: [`skills/model-kikwi-process/examples/credit-approval.draft.kikwi.json`](skills/model-kikwi-process/examples/credit-approval.draft.kikwi.json)
+
+```json
+"CREDIT_DECISION": {
+  "id": "CREDIT_DECISION", "name": "Credit Approved?", "type": "EXCLUSIVE_GATEWAY",
+  "description": "Roteia com base no resultado da análise de crédito. Decisão técnica em aberto: a
+    chamada de aprovar/reprovar é feita por um bean de motor de regras (providerType: BEAN) ou é só a
+    leitura de uma variável que ANALYZE_CREDIT já definiu (providerType: VARIABLE)? Ainda não decidido.",
+  "outgoing": [
+    { "id": "flow-3", "targetNodeId": "SEND_TO_SIGNATURE", "name": "Aprovado", "expectedAnswer": "APPROVED" },
+    { "id": "flow-4", "targetNodeId": "NOTIFY_REJECTION", "name": "Reprovado", "isDefault": true }
+  ]
+}
+```
+
+Repare o que *não* está ali: nenhum `providerType`, nenhum `providerBean`/`providerVariable`. Validar esse
+arquivo contra o `schemas/kikwi-deploy.schema.json` em vez do schema de rascunho falha exatamente com esses
+três campos reportados como faltando — que é o objetivo, não um bug. Esse arquivo nunca foi feito pra passar
+nesse schema ainda.
+
+### Endurecendo depois
+
+Quando as decisões técnicas de fato forem tomadas (digamos, a engenharia confirma que a decisão é um bean de
+motor de regras), entregar o mesmo arquivo de volta pra `model-kikwi-process` com essa resposta roda a skill
+de novo em **modo deploy** sobre o mesmo grafo — os Steps 1–3 não precisam ser refeitos, só o Step 4 (preencher
+o que o modo rascunho deixou de fora) e os Steps 6–7 normalmente. É a mesma skill, o mesmo mapeamento de tipo
+de nó, só a flag de modo que muda quando existe algo real pra resolver.
+
+---
+
+## 3. `document-java-as-kikwi` — código existente → diagrama de documentação
 
 ### Prompt
 
@@ -131,7 +194,7 @@ o leitor nunca precisa sair do diagrama para ver a lógica real.
 
 ---
 
-## 3. Encadeando com a `beautify-kikwi-diagram`
+## 4. Encadeando com a `beautify-kikwi-diagram`
 
 Pegue o arquivo de aprovação de despesas da §1 — todo `layout` ainda está `{ "x": 0, "y": 0 }`. Entregar esse
 arquivo para a `beautify-kikwi-diagram` com um prompt como:
@@ -161,7 +224,7 @@ da lógica do grafo.
 
 ---
 
-## 4. Fechando o loop: `implement-kikwi-components`
+## 5. Fechando o loop: `implement-kikwi-components`
 
 Voltando à §1, a entrega de aprovação de despesas listou um item em aberto: `expenseValidationTaskHandler`
 precisa de um bean `TaskHandler` real. Entregar esse mesmo `.kikwi` (ou só essa linha da entrega) para a
@@ -200,16 +263,18 @@ ordem entre elas não importa, já que uma só escreve código-fonte Java e a ou
 
 ---
 
-## 5. Opcional: checagem de sanidade de um resultado
+## 6. Opcional: checagem de sanidade de um resultado
 
-As saídas das duas skills de construção têm um JSON Schema estrutural em [`schemas/`](schemas/) —
-[`kikwi-deploy.schema.json`](schemas/kikwi-deploy.schema.json) para a saída da `model-kikwi-process`,
-[`kikwi-docs.schema.json`](schemas/kikwi-docs.schema.json) para a saída da `document-java-as-kikwi`. Eles
-pegam erros de formato (um `executor` faltando em um `EXECUTABLE_TASK`, um campo desconhecido, um valor de
-enum inválido para `providerType`) mas — deliberadamente — não o conjunto completo de regras semânticas
-(edges `isDefault` duplicados, nós inalcançáveis, `kikwi:documentation`/`kikwi:documentationLink` ambos
-definidos ao mesmo tempo). Essa checagem mais profunda é para o que serve o `reference/validation-checklist.md`
-de cada skill; o schema é um primeiro filtro rápido, não um substituto para ele.
+A saída da `model-kikwi-process` (modo deploy) e da `document-java-as-kikwi` cada uma tem um JSON Schema
+estrutural em [`schemas/`](schemas/) — [`kikwi-deploy.schema.json`](schemas/kikwi-deploy.schema.json) e
+[`kikwi-docs.schema.json`](schemas/kikwi-docs.schema.json), respectivamente.
+[`kikwi-draft.schema.json`](schemas/kikwi-draft.schema.json) é o terceiro, deliberadamente leve, pro modo
+rascunho da §2 — veja lá o porquê de validar um rascunho contra o schema de deploy *dever* falhar. Os dois
+schemas rígidos pegam erros de formato (um `executor` faltando em um `EXECUTABLE_TASK`, um campo
+desconhecido, um valor de enum inválido para `providerType`) mas — deliberadamente — não o conjunto completo
+de regras semânticas (nós inalcançáveis, `kikwi:documentation`/`kikwi:documentationLink` ambos definidos ao
+mesmo tempo). Essa checagem mais profunda é para o que serve o `reference/validation-checklist.md` de cada
+skill; o schema é um primeiro filtro rápido, não um substituto para ele.
 
 ```bash
 pip install jsonschema

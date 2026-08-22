@@ -3,14 +3,17 @@ name: model-kikwi-process
 description: >
   Turns a natural-language specification (a user story, a requirements doc, a description of a business
   process someone types out loud) into a Kikwiflow process definition — a `.kikwi` JSON file with the right
-  node types and valid sequence flows, ready to be implemented and deployed. Layout coordinates are left
-  zeroed and handed off to the separate `beautify-kikwi-diagram` skill, so this skill can focus entirely on
-  structural correctness. Trigger this skill when asked to "model", "design", or "create a process/flow" for
+  node types and valid sequence flows. Has two modes (Step 0 decides which): deploy mode, ready to be
+  implemented and deployed, where `executor`/`providerBean` values should resolve to actual beans and the
+  file passes real deploy-time validation; and draft mode, for sketching a process incrementally with a
+  non-technical stakeholder who doesn't have deploy-time answers yet — leaves technical binding fields out
+  rather than inventing them, and is explicitly not meant to deploy until hardened into deploy mode later.
+  Layout coordinates are left zeroed either way and handed off to the separate `beautify-kikwi-diagram`
+  skill. Trigger this skill when asked to "model", "design", "sketch", or "create a process/flow" for
   Kikwiflow from a description of desired behavior. This is the mirror image of `document-java-as-kikwi`
-  (which reads *existing code*, documentation-only, never meant to run) — this skill starts from *intent*, not
-  code, and its output is meant to become real: `executor`/`providerBean` values should resolve to actual
-  beans (existing or to be built), not just be readable labels, and the JSON must match the exact field names
-  the engine deserializes (`ProcessDefinitionDeployRequest`/`FlowNodeDefinition` in `kikwi-model`), not an
+  (which reads *existing code*, documentation-only, never meant to run) — this skill starts from *intent*,
+  not code, and in deploy mode its output is meant to become real, matching the exact field names the
+  engine deserializes (`ProcessDefinitionDeployRequest`/`FlowNodeDefinition` in `kikwi-model`), not an
   approximation of them.
 ---
 
@@ -26,8 +29,9 @@ description: >
 > Bundled reference material, loaded on demand as each step below points to it:
 > [`reference/node-types.md`](reference/node-types.md) (full node type catalog, Step 3) and
 > [`reference/validation-checklist.md`](reference/validation-checklist.md) (deploy-validity checklist,
-> Step 6). A worked example lives at
-> [`examples/expense-approval.kikwi.json`](examples/expense-approval.kikwi.json).
+> Step 6, deploy mode only). Worked examples: deploy mode at
+> [`examples/expense-approval.kikwi.json`](examples/expense-approval.kikwi.json), draft mode at
+> [`examples/credit-approval.draft.kikwi.json`](examples/credit-approval.draft.kikwi.json).
 >
 > New here? See the [repo tutorial](../../TUTORIAL.md) for a full worked prompt → output walkthrough,
 > including chaining this skill's output into `beautify-kikwi-diagram`.
@@ -59,6 +63,57 @@ visual editor). This skill goes the other way and its output **is meant to becom
   ([`reference/validation-checklist.md`](reference/validation-checklist.md) is grounded in `kikwi-core`'s
   `DeployValidator` source, split explicitly between what actually blocks a deploy today and what doesn't but
   will still break the process at runtime).
+
+That's the deploy-mode contract. Step 0 below covers the other mode this skill supports.
+
+## Step 0 — Draft or deploy? Decide the mode before writing anything
+
+Not every request that starts with "model a process for..." is ready for deploy-grade precision, and
+forcing it prematurely is its own kind of mistake — the same "don't mix concerns in one pass" reasoning
+that keeps layout ([`beautify-kikwi-diagram`](../beautify-kikwi-diagram/SKILL.md)) and Java implementation
+([`implement-kikwi-components`](../implement-kikwi-components/SKILL.md)) as separate follow-up passes
+applies here too, one level earlier: **getting the business shape right** and **pinning down the exact
+technical binding** are different kinds of decisions, and a business stakeholder sketching a process for
+the first time usually only has the first one to give you.
+
+**Default to draft mode** unless something below clearly signals deploy mode:
+
+| Signal | Mode |
+|---|---|
+| No target project/codebase is in context to resolve beans against | Draft |
+| The request reads as exploratory — "let's sketch...", "I want to outline...", "not sure yet how this would work technically" | Draft |
+| This is an early/incremental pass on a process still being described, likely to change | Draft |
+| A real Spring project is in context, with beans to search (Step 4 needs this) | Deploy |
+| The request explicitly says "deployable", "production-ready", "generate the final process", or names a specific bean/provider | Deploy |
+| The user is iterating on a `.kikwi` that's already deploy-grade (has real `providerType`/`executor` values throughout) | Deploy |
+
+When genuinely ambiguous, ask — this is exactly the kind of thing worth one clarifying question rather
+than guessing, same spirit as Step 1's "handle gaps explicitly" below. State which mode you're using at
+the start of the delivery either way; don't leave the reader to infer it from what's missing.
+
+### What changes between the two modes
+
+Steps 1–3 (spec → node types, file structure, node catalog) are **identical** in both modes — the
+business-language mapping table below doesn't care which mode you're in. What differs is everything after
+that:
+
+| | Draft mode | Deploy mode |
+|---|---|---|
+| **Technical binding fields** (`providerType`, `providerBean`/`providerVariable`, `executor`, `attachedToRef`, `calledElement`, `schedulePolicy`, ...) | **Omit** rather than invent. Use the node's `description` to name the open technical decision explicitly (see the example below) — never fill these with a plausible-looking placeholder that reads as if it were a real answer. | Resolve for real — Step 4. |
+| **Step 4** (bean resolution) | Skip entirely. | Run as written. |
+| **Step 6 checklist / schema** | Validate against [`../../schemas/kikwi-draft.schema.json`](../../schemas/kikwi-draft.schema.json) instead of loading `reference/validation-checklist.md` — it only checks that node types are real and the shape is sound, not that any technical field is present or internally consistent (a draft is allowed to be briefly inconsistent — e.g. two `isDefault` edges while branches are still being figured out). | Run Step 6 as written, against `reference/validation-checklist.md` and [`../../schemas/kikwi-deploy.schema.json`](../../schemas/kikwi-deploy.schema.json). |
+| **Step 7 delivery** | State plainly this is a **draft, not deployable** — list the open technical decisions (already visible in each node's `description`) as what a hardening pass still needs, not as a "components to implement" TODO (there's no bean to implement yet, there's a decision to make first). | Run Step 7 as written. |
+
+A draft's `description` fields carry the same weight documentation would in `document-java-as-kikwi` — write
+them so a developer picking this up later understands exactly what's still open, not just that something is.
+See [`examples/credit-approval.draft.kikwi.json`](examples/credit-approval.draft.kikwi.json) for the shape
+this produces in practice.
+
+**Hardening a draft into deploy mode**, once the technical decisions are made, is running this same skill
+again over the same file in deploy mode — Steps 1–3 are already satisfied (the graph doesn't need
+rebuilding), so that pass is really just Step 4 (resolve every field draft mode left out) followed by
+Step 6/7 as normal. It's not a different skill and not a different node-type mapping — only the mode flag
+changes.
 
 ## Step 1 — Read the spec and build the flow skeleton
 
@@ -260,8 +315,9 @@ whole catalog in mind at once.
 
 ## Step 4 — Resolving `executor`/`providerBean` against real beans
 
-This is what makes the output deployable instead of decorative. If you're running inside (or pointed at) the
-target Spring Boot project:
+**Deploy mode only — skip this entire step in draft mode** (see Step 0's table). This is what makes the
+output deployable instead of decorative. If you're running inside (or pointed at) the target Spring Boot
+project:
 
 1. Search for existing beans that already do what a step needs — `@Component("name") implements TaskHandler`
    for `EXECUTABLE_TASK.executor`, `implements AnswerProvider` for `EXCLUSIVE_GATEWAY.providerBean` (when
@@ -305,6 +361,9 @@ arrangement rules. At this stage:
 
 ## Step 6 — Validity checklist
 
+**In draft mode, validate against [`../../schemas/kikwi-draft.schema.json`](../../schemas/kikwi-draft.schema.json)
+instead and skip the rest of this step** — see Step 0's table for why. What follows is deploy mode only.
+
 Load [`reference/validation-checklist.md`](reference/validation-checklist.md) before delivering. It's split
 into two deliberately separate tiers: **A**, what `kikwi-core`'s `DeployValidator` actually checks today (get
 any of these wrong and `POST /process-definitions` throws `InvalidProcessDefinitionException`, or for some
@@ -316,6 +375,21 @@ deploy as proof the model is fully correct.
 ---
 
 ## Step 7 — What to deliver
+
+**Draft mode** delivers a shorter, differently-framed set — skip the rest of this step and use this instead:
+
+1. The `<process-key>.kikwi` file, stated up front as a **draft, not deployable**.
+2. **Open technical decisions** — every node whose `description` names something still undecided (see
+   Step 0), pulled into one list so it doesn't require reading every node to find. This is deliberately
+   framed as decisions to make, not components to implement — there's no bean name yet to hand to
+   `implement-kikwi-components`, because the shape of what's needed (a bean at all? a variable? a human
+   step?) isn't settled.
+3. **Assumptions and open questions** — same as deploy mode's item 3 below, for genuine business-logic
+   gaps (as opposed to technical-binding gaps, covered by item 2 above).
+4. A one-line note on how to proceed: re-run this skill in deploy mode over the same file once the open
+   decisions above are resolved (see Step 0's "hardening" note).
+
+**Deploy mode:**
 
 1. The `<process-key>.kikwi` file.
 2. **Components to implement** — a short list of any `executor`/`providerBean`/`providerVariable` values that
@@ -336,18 +410,26 @@ deploy as proof the model is fully correct.
 
 ---
 
-## Reference example
+## Reference examples
 
-[`examples/expense-approval.kikwi.json`](examples/expense-approval.kikwi.json) is a complete, valid file for a
-"request needs review, with an SLA that escalates it" shape — an `EXTERNAL_TASK` awaiting manager approval,
-with a `BOUNDARY_INTERRUPTIVE_TIMER` that escalates to finance review after 48h with no response. Use it as a
-formatting template, not content to copy; the actual flow, names, and traceability always come from the real
-spec. Every `layout` in it is zeroed, per Step 5 — it would still need a `beautify-kikwi-diagram` pass before
-being handed to a human reader (see the [repo tutorial](../../TUTORIAL.md) for that pass applied to this exact
-file). The example also illustrates the Step 1 "handle gaps explicitly" rule in practice: the source spec
-fragment it was built from never says what happens if the manager explicitly *rejects* the expense (only "no
-response" is handled, via the timer) — that gap is the kind of load-bearing ambiguity to surface in Step 7
-rather than silently omit or silently invent a rejection path.
+**Deploy mode:** [`examples/expense-approval.kikwi.json`](examples/expense-approval.kikwi.json) is a
+complete, valid file for a "request needs review, with an SLA that escalates it" shape — an
+`EXTERNAL_TASK` awaiting manager approval, with a `BOUNDARY_INTERRUPTIVE_TIMER` that escalates to finance
+review after 48h with no response. Use it as a formatting template, not content to copy; the actual flow,
+names, and traceability always come from the real spec. Every `layout` in it is zeroed, per Step 5 — it
+would still need a `beautify-kikwi-diagram` pass before being handed to a human reader (see the
+[repo tutorial](../../TUTORIAL.md) for that pass applied to this exact file). The example also illustrates
+the Step 1 "handle gaps explicitly" rule in practice: the source spec fragment it was built from never says
+what happens if the manager explicitly *rejects* the expense (only "no response" is handled, via the
+timer) — that gap is the kind of load-bearing ambiguity to surface in Step 7 rather than silently omit or
+silently invent a rejection path.
+
+**Draft mode:** [`examples/credit-approval.draft.kikwi.json`](examples/credit-approval.draft.kikwi.json)
+sketches a credit-approval flow from a business description with no target project in context. Every
+technical binding field (`providerType` on the gateway, `executor` on both tasks) is omitted rather than
+invented; each node's `description` instead names the specific open technical decision a hardening pass
+still needs to make. It validates against `schemas/kikwi-draft.schema.json` but deliberately fails
+`schemas/kikwi-deploy.schema.json` — that gap is the point, not a bug.
 
 ## Where the ground truth lives
 

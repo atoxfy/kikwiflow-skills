@@ -1,0 +1,123 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/kikwiflow/kikwiflow-skills/schemas/kikwi-draft.schema.json",
+  "title": "Kikwiflow draft process specification",
+  "description": "Structural companion to model-kikwi-process' draft mode (Step 0) — for a business/specification sketch that is NOT yet meant to deploy or document existing code, built incrementally with a non-technical stakeholder who doesn't have (and shouldn't be forced to invent) answers to deploy-time technical questions yet. Same 15 node types and the same top-level/edge shape as kikwi-deploy.schema.json, but every node-type-specific technical field (executor, providerType/providerBean/providerVariable, attachedToRef, calledElement, schedulePolicy, ...) is optional here, and none of the cross-field semantic rules (at most one isDefault edge, GROUP+STATIC forbidden, elementVariable needs collectionVariable) are enforced — a real sketch is allowed to be incomplete or briefly inconsistent mid-conversation. This schema still requires a name/type per node and catches actual typos (an unknown field name, a node type outside the real 15, a dangling edge shape) — the two things a rough sketch has no excuse to get wrong. A file that only validates against this schema is NOT deploy-ready: run it back through model-kikwi-process in deploy mode (checked against kikwi-deploy.schema.json) once the technical decisions this schema deliberately doesn't ask for are actually known.",
+
+  "type": "object",
+  "required": ["key", "flowNodes"],
+  "unevaluatedProperties": false,
+  "properties": {
+    "key": { "type": "string", "minLength": 1 },
+    "name": { "type": ["string", "null"] },
+    "description": { "type": ["string", "null"] },
+    "sla": { "type": ["string", "null"] },
+    "defaultStartPoint": { "type": ["string", "null"] },
+    "flowNodes": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": { "$ref": "#/$defs/flowNodeUnion" }
+    },
+    "extensionProperties": { "$ref": "#/$defs/common/extensionProperties" }
+  },
+
+  "$defs": {
+    "common": {
+      "extensionProperties": {
+        "type": ["object", "null"],
+        "additionalProperties": { "type": "string" }
+      },
+
+      "layoutCoordinates": {
+        "type": ["object", "null"],
+        "unevaluatedProperties": false,
+        "properties": {
+          "x": { "type": ["number", "null"] },
+          "y": { "type": ["number", "null"] }
+        }
+      },
+
+      "sequenceFlow": {
+        "type": "object",
+        "description": "id/targetNodeId are still required — an edge that doesn't say where it goes isn't a sketch, it's a typo. Everything gateway-specific (isDefault, handlesNull, expectedAnswer) stays optional and unconstrained: a draft is allowed to leave routing rules undecided, or briefly inconsistent (e.g. two isDefault edges while still figuring out the branches), without that blocking the sketch.",
+        "unevaluatedProperties": false,
+        "required": ["id", "targetNodeId"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "name": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "expectedAnswer": { "type": ["string", "null"] },
+          "targetNodeId": { "type": "string", "minLength": 1 },
+          "isDefault": { "type": "boolean" },
+          "handlesNull": { "type": "boolean" },
+          "positionHandlers": { "type": ["array", "null"], "items": { "$ref": "#/$defs/common/layoutCoordinates" } },
+          "extensionProperties": { "$ref": "#/$defs/common/extensionProperties" },
+          "labelPosition": { "$ref": "#/$defs/common/layoutCoordinates" },
+          "sourceHandle": { "type": ["string", "null"] }
+        }
+      },
+
+      "baseNodeFields": {
+        "type": "object",
+        "description": "id/name/type are still required — a node needs a name even in a sketch (the name usually *is* the content at this stage); everything below is the same shape as the deploy schema, just without any of it being mandatory.",
+        "required": ["id", "name", "type"],
+        "properties": {
+          "id": { "type": "string" },
+          "name": { "type": "string" },
+          "type": { "type": "string" },
+          "description": { "type": ["string", "null"] },
+          "commitAfter": { "type": ["boolean", "null"] },
+          "commitBefore": { "type": ["boolean", "null"] },
+          "outgoing": { "type": ["array", "null"], "items": { "$ref": "#/$defs/common/sequenceFlow" } },
+          "extensionProperties": { "$ref": "#/$defs/common/extensionProperties" },
+          "layout": { "$ref": "#/$defs/common/layoutCoordinates" }
+        }
+      }
+    },
+
+    "flowNodeUnion": {
+      "type": "object",
+      "description": "A single shared node schema, deliberately NOT branched per node type the way kikwi-deploy.schema.json's flowNodeUnion is: the whole point of draft mode is that a task, a gateway, and a boundary event all reduce to 'id + name + type + maybe a technical field nobody's decided yet' — there's no per-type required set left to differentiate. Every technical field any of the 15 types can carry is listed below as optional and loosely typed; see skills/model-kikwi-process/reference/node-types.md for the real per-type catalog (which fields actually apply to which type, and what's required) once it's time to harden this into a deploy-grade file.",
+      "required": ["id", "type"],
+      "unevaluatedProperties": false,
+      "allOf": [{ "$ref": "#/$defs/common/baseNodeFields" }],
+      "properties": {
+        "type": {
+          "enum": [
+            "DEFAULT_START_EVENT", "DEFAULT_END_EVENT", "EXECUTABLE_TASK", "EXTERNAL_TASK",
+            "EXCLUSIVE_GATEWAY", "PARALLEL_GATEWAY", "JOIN_GATEWAY",
+            "BOUNDARY_INTERRUPTIVE_TIMER", "BOUNDARY_NON_INTERRUPTIVE_TIMER", "BOUNDARY_ERROR_HANDLER",
+            "BOUNDARY_INTERRUPTIVE_CATCH_EVENT", "TIMER_TASK", "EVENT_CATCHER", "EVENT_THROWER",
+            "CALL_ACTIVITY_COORDINATOR"
+          ],
+          "description": "Still a closed list, even in a sketch — an invented 16th type isn't a valid draft of a Kikwiflow process, it's a different modeling language."
+        },
+        "boundaryEventIds": { "type": ["array", "null"], "items": { "type": "string" } },
+        "attachedToRef": { "type": ["string", "null"] },
+        "executor": { "type": ["string", "null"] },
+        "retryPolicy": { "type": ["object", "null"] },
+        "providerType": { "type": ["string", "null"] },
+        "providerBean": { "type": ["string", "null"] },
+        "providerVariable": { "type": ["string", "null"] },
+        "defaultFlow": { "type": ["string", "null"] },
+        "targetJoinId": { "type": ["string", "null"] },
+        "sourceSplitId": { "type": ["string", "null"] },
+        "staticValue": { "type": ["string", "null"] },
+        "staticKey": { "type": ["string", "null"] },
+        "keyPrefix": { "type": ["string", "null"] },
+        "keySuffix": { "type": ["string", "null"] },
+        "displayNamePrefix": { "type": ["string", "null"] },
+        "displayNameSuffix": { "type": ["string", "null"] },
+        "correlationTemplates": { "type": ["array", "null"] },
+        "schedulePolicy": { "type": ["object", "null"] },
+        "errorCode": { "type": ["string", "null"] },
+        "catchType": { "type": ["string", "null"] },
+        "matchPolicy": { "type": ["string", "null"] },
+        "calledElement": { "type": ["string", "null"] },
+        "collectionVariable": { "type": ["string", "null"] },
+        "elementVariable": { "type": ["string", "null"] },
+        "iterationMode": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

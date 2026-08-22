@@ -24,9 +24,11 @@ skills/<name>/
                           # (implement-kikwi-components has examples/*.java instead — see below)
 ```
 
-`schemas/kikwi-deploy.schema.json` and `schemas/kikwi-docs.schema.json` are structural JSON Schemas
-(one per output flavor) that catch shape mistakes in a `.kikwi` file — not a substitute for each
-skill's `reference/validation-checklist.md`, just a fast first filter. `TUTORIAL.md` (mirrored in Portuguese at `TUTORIAL.pt-br.md` — keep both in sync on edits) is a
+`schemas/kikwi-deploy.schema.json`, `schemas/kikwi-draft.schema.json`, and `schemas/kikwi-docs.schema.json`
+are structural JSON Schemas that catch shape mistakes in a `.kikwi` file — not a substitute for each
+skill's `reference/validation-checklist.md`, just a fast first filter. The draft schema is deliberately
+much lighter than the other two (see `model-kikwi-process`'s Step 0) — don't align its strictness to the
+other two by habit; they're answering different questions. `TUTORIAL.md` (mirrored in Portuguese at `TUTORIAL.pt-br.md` — keep both in sync on edits) is a
 worked prompt → output walkthrough per skill, including the `model-kikwi-process` →
 `beautify-kikwi-diagram` handoff applied to a real file.
 
@@ -50,7 +52,7 @@ and keeping the four skills consistent with each other, with `TUTORIAL.md`, and 
 
 | Skill | Starts from | Produces |
 |---|---|---|
-| `model-kikwi-process` | a natural-language spec (user story, requirements) | a **deployable** `.kikwi` — exact engine field names (`ProcessDefinitionDeployRequest`/`FlowNodeDefinition` from `kikwi-model`), real bean resolution, deploy-validation checklist |
+| `model-kikwi-process` | a natural-language spec (user story, requirements) | **draft mode**: a business-shape sketch, technical fields deliberately omitted, not deployable. **Deploy mode**: a **deployable** `.kikwi` — exact engine field names (`ProcessDefinitionDeployRequest`/`FlowNodeDefinition` from `kikwi-model`), real bean resolution, deploy-validation checklist. Step 0 picks the mode. |
 | `document-java-as-kikwi` | an **existing Java project** | a documentation-only `.kikwi` — never deployed, rich per-node `kikwi:documentation` (real code excerpts, Mermaid diagrams) |
 | `beautify-kikwi-diagram` | an already-correct `.kikwi` from either skill above | the same graph with computed `layout` coordinates only — never touches business/schema fields |
 | `implement-kikwi-components` | `model-kikwi-process`'s "components to implement" list (or a bare `.kikwi`'s dangling `executor`/`providerBean` refs) | real `TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider` Java classes + unit tests — never touches the `.kikwi` |
@@ -64,6 +66,13 @@ guidance to the two construction skills; that's `beautify-kikwi-diagram`'s job a
 `document-java-as-kikwi` — its `executor`/`providerBean` values are descriptive labels, not real
 references) — it can run before, after, or interleaved with `beautify-kikwi-diagram` since the two
 never touch the same artifact.
+
+Orthogonal to all of the above: `model-kikwi-process` itself has a draft/deploy mode split (its Step 0).
+Draft mode exists because a business stakeholder sketching a process incrementally usually doesn't have
+deploy-time technical answers yet (which `providerType`, what a bean would be called) — forcing that
+precision on turn one is the same "mixing concerns" mistake the layout/implementation split above already
+avoids, one level earlier. Don't conflate "draft vs. deploy" with "model-kikwi-process vs.
+document-java-as-kikwi" — a draft is still headed toward deployment eventually; documentation output never is.
 
 ## Editing conventions (keeping the four skills coherent)
 
@@ -86,12 +95,18 @@ never touch the same artifact.
   (`TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider`) and the
   `ExecutionContext`-vs-`EvaluationContext` distinction must stay in sync with `model-kikwi-process`'s
   own `providerType: BEAN` guidance if either changes.
-- **Deliberate schema divergence between the two construction skills is intentional, not a bug**:
-  `model-kikwi-process`'s `outgoing` (`SequenceFlowDefinition`) has no `transitionType` and no
-  per-edge `extensionProperties` (its output must actually deploy, so it follows the engine's real
-  deserialization records); `document-java-as-kikwi`'s `outgoing` keeps both fields (its output is
-  never deployed, so there's no cost to the extra descriptive fields). Don't "fix" this to make the
-  two match.
+- **Deliberate schema divergence between the two construction skills is intentional, not a bug —
+  but narrower than it used to be.** `model-kikwi-process`'s `outgoing` (`SequenceFlowDefinition`) has
+  no `transitionType`; `document-java-as-kikwi`'s `outgoing` keeps it for descriptive value even though
+  the engine model has no such field. Don't "fix" this to make the two match. Per-edge
+  `extensionProperties`, however, is **not** a divergence — it's a real, persisted `SequenceFlowDefinition`
+  field in both skills' output today (confirmed against the engine model directly; earlier versions of
+  this repo incorrectly described it as documentation-skill-only). If you're tempted to reintroduce that
+  claim, don't — check `schemas/kikwi-deploy.schema.json`'s `sequenceFlow` definition first.
+- **Draft mode's leniency and deploy mode's rigor don't automatically transfer between the two
+  `model-kikwi-process` schemas.** A new deploy-time requirement added to `kikwi-deploy.schema.json`
+  doesn't belong in `kikwi-draft.schema.json` by default, and vice versa — decide per change which
+  mode(s) it actually applies to.
 - **Cross-links use relative paths** (`../<skill-name>/SKILL.md`) so the repo works both as a
   standalone clone and once copied into a `.claude/skills/` directory elsewhere — don't switch these
   to absolute URLs.

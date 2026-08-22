@@ -1,0 +1,73 @@
+{
+  "key": "credit-approval",
+  "name": "Credit Approval (draft)",
+  "description": "DRAFT — sketched directly from a business conversation, no target project referenced yet. Captures the shape only: customer requests a loan, the system analyzes credit, and routes to contract signature or a rejection notice. Every technical field a real deploy would need (providerType, executor, bean names) is deliberately left out rather than invented — see each node's own description for what's still an open technical decision. Validate against schemas/kikwi-draft.schema.json, not kikwi-deploy.schema.json, until those decisions are made; then run model-kikwi-process again in deploy mode over this same shape.",
+  "defaultStartPoint": "START",
+  "flowNodes": {
+    "START": {
+      "id": "START",
+      "name": "Loan Requested",
+      "description": "Customer submits a loan request.",
+      "type": "DEFAULT_START_EVENT",
+      "outgoing": [
+        { "id": "flow-1", "targetNodeId": "ANALYZE_CREDIT", "name": "", "description": "" }
+      ],
+      "layout": { "x": 0, "y": 0 }
+    },
+    "ANALYZE_CREDIT": {
+      "id": "ANALYZE_CREDIT",
+      "name": "Analyze Credit",
+      "description": "The system evaluates the customer's credit. Open technical decision: is this a synchronous rule engine call (EXECUTABLE_TASK, stays as-is) or does it depend on an external bureau/service that doesn't answer immediately (would need to become EXTERNAL_TASK instead)? Confirm with engineering before hardening.",
+      "type": "EXECUTABLE_TASK",
+      "outgoing": [
+        { "id": "flow-2", "targetNodeId": "CREDIT_DECISION", "name": "", "description": "" }
+      ],
+      "layout": { "x": 0, "y": 0 }
+    },
+    "CREDIT_DECISION": {
+      "id": "CREDIT_DECISION",
+      "name": "Credit Approved?",
+      "description": "Routes on the outcome of the credit analysis. Open technical decision: is the approve/reject call made by a rule engine bean (providerType: BEAN) or is it just reading a variable ANALYZE_CREDIT already set (providerType: VARIABLE)? Not decided yet — pick this during hardening, not here.",
+      "type": "EXCLUSIVE_GATEWAY",
+      "outgoing": [
+        { "id": "flow-3", "targetNodeId": "SEND_TO_SIGNATURE", "name": "Approved", "description": "", "expectedAnswer": "APPROVED" },
+        { "id": "flow-4", "targetNodeId": "NOTIFY_REJECTION", "name": "Rejected", "description": "", "isDefault": true }
+      ],
+      "layout": { "x": 0, "y": 0 }
+    },
+    "SEND_TO_SIGNATURE": {
+      "id": "SEND_TO_SIGNATURE",
+      "name": "Send to Contract Signature",
+      "description": "Customer signs the loan contract. Open technical decision: is this a human/external step (EXTERNAL_TASK, likely) or does an e-signature platform call back asynchronously via a correlation key (EVENT_CATCHER)? Depends on which e-signature integration the business ends up choosing.",
+      "type": "EXTERNAL_TASK",
+      "outgoing": [
+        { "id": "flow-5", "targetNodeId": "APPROVED", "name": "", "description": "" }
+      ],
+      "layout": { "x": 0, "y": 0 }
+    },
+    "NOTIFY_REJECTION": {
+      "id": "NOTIFY_REJECTION",
+      "name": "Notify Customer of Rejection",
+      "description": "Customer is informed the loan wasn't approved. Open technical decision: which channel (email/SMS/push) and whether it's synchronous — not discussed yet.",
+      "type": "EXECUTABLE_TASK",
+      "outgoing": [
+        { "id": "flow-6", "targetNodeId": "REJECTED", "name": "", "description": "" }
+      ],
+      "layout": { "x": 0, "y": 0 }
+    },
+    "APPROVED": {
+      "id": "APPROVED",
+      "name": "Loan Approved",
+      "type": "DEFAULT_END_EVENT",
+      "outgoing": [],
+      "layout": { "x": 0, "y": 0 }
+    },
+    "REJECTED": {
+      "id": "REJECTED",
+      "name": "Loan Rejected",
+      "type": "DEFAULT_END_EVENT",
+      "outgoing": [],
+      "layout": { "x": 0, "y": 0 }
+    }
+  }
+}

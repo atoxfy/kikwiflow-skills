@@ -210,7 +210,7 @@ boundary nodes themselves) don't have the field at all.
 
 ### `outgoing` — the exact `SequenceFlowDefinition` shape
 
-**This is the field set the engine actually deserializes — use exactly this, nothing more:**
+**This is the field set the engine actually deserializes:**
 
 ```json
 {
@@ -220,32 +220,30 @@ boundary nodes themselves) don't have the field at all.
   "targetNodeId": "NEXT_NODE_ID",
   "isDefault": false,
   "handlesNull": false,
-  "expectedAnswer": null
+  "expectedAnswer": null,
+  "extensionProperties": {}
 }
 ```
 
-There is **no `transitionType` field and no `extensionProperties` field on a sequence flow** — those exist on
-`FlowNodeDefinition` (the node), not on `SequenceFlowDefinition` (the edge); including them is harmless if the
-target project's Jackson config ignores unknown properties, but don't rely on that, and don't invent them from
-memory. `isDefault`/`handlesNull` are plain `boolean` (default `false` if omitted); `expectedAnswer` only means
-anything on an `EXCLUSIVE_GATEWAY`'s edges (see [`reference/node-types.md`](reference/node-types.md)). A
-`positionHandlers` field (waypoints for the connector line's visual bend points) exists too — purely cosmetic,
-safe to omit. Every node type other than `EXCLUSIVE_GATEWAY`/`PARALLEL_GATEWAY` should declare **at most one**
-entry in `outgoing`.
+There is **no `transitionType` field on a sequence flow** — that exists on `FlowNodeDefinition` (the
+node), not `SequenceFlowDefinition` (the edge); including it is harmless if the target project's Jackson
+config ignores unknown properties, but don't rely on that, and don't invent it from memory.
+`extensionProperties`, on the other hand, **is** a real, persisted field on the edge itself, not a
+node-only or UI-only concept — it's the sanctioned way to attach `kikwi:documentation`/
+`kikwi:documentationLink` to an edge exactly as on a node (omitted/`null` input is normalized to `{}`,
+never left `null` once deployed). `isDefault`/`handlesNull` are plain `boolean` (default `false` if
+omitted); `expectedAnswer` only means anything on an `EXCLUSIVE_GATEWAY`'s edges (see
+[`reference/node-types.md`](reference/node-types.md)). Two more fields exist purely for the visual
+editor and are safe to omit: `positionHandlers` (waypoints for the connector line's visual bend points)
+and `labelPosition`/`sourceHandle` (where a human manually dragged an edge's label or connection point —
+round-trip these exactly if present in an existing file, never synthesize a default). Every node type
+other than `EXCLUSIVE_GATEWAY`/`PARALLEL_GATEWAY` should declare **at most one** entry in `outgoing`.
 
 (Note: a companion documentation-only spec — used by [`document-java-as-kikwi`](../document-java-as-kikwi/SKILL.md) —
-does include `transitionType` and per-edge `extensionProperties`. That's a deliberate divergence, not an
-oversight: this skill's output must actually deploy, so it follows the deserialization records/`DeployValidator`
-cited below over a prose spec. If the target project's real generated model classes are available, verify against
-those directly instead of taking either doc's word for it.)
-
-(Note: Kikwiflow Craft itself now formalizes part of that documentation-only divergence: it always writes
-`extensionProperties` on every edge (default `{}`), and recognizes two reserved keys —
-`kikwi:documentation` (embedded markdown, may include Mermaid diagrams and code blocks) and
-`kikwi:documentationLink` (a local path or web URL) — as the sanctioned way to attach rich documentation to
-a node, an edge, or the process itself, editable via each panel's "Documentação" section. These two keys are
-purely descriptive; they carry the same deploy-safety caveat as any other edge `extensionProperties` above —
-don't assume a real deploy target reads or tolerates them.)
+also includes `transitionType` on its edges, which this skill's output should not. That's a deliberate
+divergence, not an oversight: this skill's output must actually deploy, so it follows the deserialization
+records/`DeployValidator` cited below over a prose spec. If the target project's real generated model
+classes are available, verify against those directly instead of taking either doc's word for it.)
 
 ---
 

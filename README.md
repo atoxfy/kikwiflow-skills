@@ -26,7 +26,7 @@ or more ends.
 
 | Skill | Purpose | Typical trigger phrases |
 |---|---|---|
-| [`model-kikwi-process`](skills/model-kikwi-process/SKILL.md) | Turns a natural-language spec (a user story, a requirements doc) into a **deployable** `.kikwi` — exact engine field names, real bean resolution, deploy-validation checklist. | "model a process for...", "design the flow for...", "create a Kikwiflow process from this spec" |
+| [`model-kikwi-process`](skills/model-kikwi-process/SKILL.md) | Turns a natural-language spec into a `.kikwi`. Two modes: **draft** — sketching with a non-technical stakeholder, technical fields deliberately left out, not meant to deploy yet — and **deploy** — exact engine field names, real bean resolution, deploy-validation checklist. | "model a process for...", "sketch a flow for...", "create a deployable Kikwiflow process from this spec" |
 | [`document-java-as-kikwi`](skills/document-java-as-kikwi/SKILL.md) | Reads an **existing Java project** and produces a `.kikwi` that documents its business flow — never deployed, rich per-node `kikwi:documentation` (real code excerpts, Mermaid diagrams). | "document this service as `.kikwi`", "map this project's order flow", "diagram how this module works" |
 | [`beautify-kikwi-diagram`](skills/beautify-kikwi-diagram/SKILL.md) | Takes an already-correct `.kikwi` graph (from either skill above) and computes readable `layout` coordinates — non-overlapping cards, minimal edge crossings. Never touches business/schema fields. | "lay out this `.kikwi`", "beautify/reflow/reposition this diagram" |
 | [`implement-kikwi-components`](skills/implement-kikwi-components/SKILL.md) | Takes `model-kikwi-process`'s "components to implement" list (or scans a `.kikwi` directly) and generates the real `TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider` Java classes + unit tests — wired correctly, flagging any unstated business logic instead of guessing it. Never touches the `.kikwi` file. | "implement this process's handlers", "generate the TaskHandler for...", "wire up the beans this `.kikwi` needs" |
@@ -39,9 +39,10 @@ applied to a real file.
 Each skill's `SKILL.md` is the entry point; dense lookup material (the full node type catalog, the
 validation checklist) lives in that skill's `reference/` folder and is pulled in only when a step actually
 needs it, and each construction skill's `examples/` folder holds a complete, valid `.kikwi` file to use as a
-formatting template. [`schemas/`](schemas/) has a structural JSON Schema per output flavor
-(`kikwi-deploy.schema.json` for `model-kikwi-process`, `kikwi-docs.schema.json` for
-`document-java-as-kikwi`) — a fast first check, not a substitute for the reference checklist.
+formatting template. [`schemas/`](schemas/) has a structural JSON Schema per output flavor —
+`kikwi-deploy.schema.json` for `model-kikwi-process` in deploy mode, `kikwi-draft.schema.json` for the same
+skill in draft mode (deliberately light — no technical field is required), `kikwi-docs.schema.json` for
+`document-java-as-kikwi` — each a fast first check, not a substitute for the reference checklist.
 
 ### How they fit together
 
@@ -73,6 +74,16 @@ correct" with "does this look good" in the same pass is what produces mistakes i
 (not to `document-java-as-kikwi` — see that skill's own warning about why). It doesn't chain with
 `beautify-kikwi-diagram` either — the two can run in any order, since one only ever writes Java source
 and the other only ever touches `layout`; neither reads output the other produced.
+
+A separate axis sits inside `model-kikwi-process` itself, orthogonal to the diagram above: **draft vs.
+deploy mode** (its own Step 0 decides which). Real modeling conversations are usually incremental and
+start without technical answers — a business stakeholder describing a process rarely knows yet whether a
+decision needs a `providerType: BEAN` or `VARIABLE`, or what a bean would even be called. Draft mode
+produces a `.kikwi` that captures the business shape (nodes, edges, decision points) while leaving every
+technical binding field out rather than inventing a plausible-looking placeholder, validated against the
+much lighter `kikwi-draft.schema.json`. It is explicitly **not** meant to deploy — "hardening" it into
+deploy mode later is running the same skill again over the same file once the technical decisions exist,
+not a different skill or a different node-type mapping.
 
 ## Using with Claude Code
 
@@ -141,6 +152,13 @@ If you're extending or adapting these skills, keep them consistent with each oth
   a field gets renamed), update the example, not just the prose. `implement-kikwi-components`'s
   `examples/*.java` aren't compiled by anything in this repo (there's no sample Spring project here) — keep
   them consistent with the interface signatures in its `SKILL.md` by inspection when either changes.
+- **Don't let draft mode's leniency creep into the deploy schema, or deploy mode's rigor creep into the
+  draft schema.** `kikwi-draft.schema.json` exists specifically so a business sketch never fails validation
+  over a technical field nobody's decided yet — if a new deploy-mode requirement gets added to
+  `kikwi-deploy.schema.json`, it does **not** automatically belong in the draft schema too, and vice versa;
+  decide deliberately per change which mode(s) it actually applies to, the same way `document-java-as-kikwi`
+  and `model-kikwi-process`'s own edge shapes are allowed to diverge (see that skill's Step 2) without one
+  being "more correct" than the other — they're answering different questions.
 
 ## Contributing
 

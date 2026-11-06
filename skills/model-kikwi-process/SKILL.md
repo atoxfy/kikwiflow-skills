@@ -190,6 +190,17 @@ Write every generated `name`/`description`/edge label in the **language the inpu
 default to a fixed language regardless of what the spec uses. If the spec is in Portuguese, the process reads in
 Portuguese; if it's in English, it reads in English.
 
+### Don't repeat the same interrupts on several waits
+
+A spec like "remind the day before, remind on the day, then check attendance — and at any point, if the customer
+writes or the CRM changes the date, react" tempts a model with one `TIMER_TASK` per step, each carrying the same
+`BOUNDARY_INTERRUPTIVE_CATCH_EVENT`s back to the same handlers. That is N × interrupts long back-edges: no layout
+makes it readable, and every new step copies the interrupts again. Model it as a **loop with a single wait**
+instead: a planning `EXECUTABLE_TASK` computes the next step and when (`nextStep`, `nextStepAt`), one `TIMER_TASK`
+waits on `nextStepAt` and carries each interrupt once, an `EXCLUSIVE_GATEWAY` on `nextStep` runs the step, and
+every step (and every interrupt handler that resumes the flow) returns to planning. Same behavior, a fraction of
+the edges. The planning bean is a component to implement like any other (Step 4).
+
 ### Handle gaps explicitly — don't silently invent business rules
 
 Natural-language specs are almost always incomplete somewhere. Before finalizing the model, check for

@@ -4,8 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this repo is
 
-A content-only repository: four portable [Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
-(Markdown + YAML frontmatter, no code, no build system) for working with
+A content repository: four portable [Agent Skills](https://www.anthropic.com/engineering/equipping-agents-for-the-real-world-with-agent-skills)
+(Markdown + YAML frontmatter, no build system) for working with
 [Kikwiflow](https://kikwiflow.io) process definitions (`.kikwi` files — JSON graphs of nodes, each
 node's logic a plain Java bean referenced by name; no BPMN XML, no embedded expression language).
 Each skill lives at `skills/<name>/SKILL.md`, which is the Claude Code auto-discovery layout — the
@@ -18,11 +18,17 @@ Each skill folder follows the same progressive-disclosure layout:
 skills/<name>/
   SKILL.md              # entry point: frontmatter + always-relevant steps
   reference/*.md         # dense lookup material, pulled in only when a step needs it
-                          # (only model-kikwi-process and document-java-as-kikwi have this —
-                          #  beautify-kikwi-diagram and implement-kikwi-components are already lean)
+                          # (implement-kikwi-components is lean enough not to need it)
   examples/*.kikwi.json  # a complete, valid file to use as a formatting template
                           # (implement-kikwi-components has examples/*.java instead — see below)
+  scripts/*.mjs          # beautify-kikwi-diagram only: kikwi-layout.mjs, a dependency-free Node script
 ```
+
+The one piece of code is `skills/beautify-kikwi-diagram/scripts/kikwi-layout.mjs`. It exists because laying
+out a diagram from approximate sizes "by reasoning" failed on real processes (edges through cards, labels on
+top of each other): the skill now has the model decide the arrangement (a grid) and the script do the
+geometry with the canvas's measured numbers, route the edges and check the result. Keep its constants and
+`skills/beautify-kikwi-diagram/reference/canvas-geometry.md` in sync — they describe the same canvas.
 
 `schemas/kikwi-deploy.schema.json`, `schemas/kikwi-draft.schema.json`, and `schemas/kikwi-docs.schema.json`
 are structural JSON Schemas that catch shape mistakes in a `.kikwi` file — not a substitute for each
@@ -32,8 +38,10 @@ other two by habit; they're answering different questions. `TUTORIAL.md` (mirror
 worked prompt → output walkthrough per skill, including the `model-kikwi-process` →
 `beautify-kikwi-diagram` handoff applied to a real file.
 
-The only thing to "test" here is that `examples/*.kikwi.json` stay valid JSON and validate against
-their schema after an edit:
+The things to "test" here are that `examples/*.kikwi.json` stay valid JSON and validate against their
+schema after an edit, and that the layout script still lays out its example cleanly
+(`node skills/beautify-kikwi-diagram/scripts/kikwi-layout.mjs <example> <grid> <out>` must report
+`"problems": []`):
 
 ```bash
 python3 -c "import json; json.load(open('path/to/file.kikwi.json'))"
@@ -54,7 +62,7 @@ and keeping the four skills consistent with each other, with `TUTORIAL.md`, and 
 |---|---|---|
 | `model-kikwi-process` | a natural-language spec (user story, requirements) | **draft mode**: a business-shape sketch, technical fields deliberately omitted, not deployable. **Deploy mode**: a **deployable** `.kikwi` — exact engine field names (`ProcessDefinitionDeployRequest`/`FlowNodeDefinition` from `kikwi-model`), real bean resolution, deploy-validation checklist. Step 0 picks the mode. |
 | `document-java-as-kikwi` | an **existing Java project** | a documentation-only `.kikwi` — never deployed, rich per-node `kikwi:documentation` (real code excerpts, Mermaid diagrams) |
-| `beautify-kikwi-diagram` | an already-correct `.kikwi` from either skill above | the same graph with computed `layout` coordinates only — never touches business/schema fields |
+| `beautify-kikwi-diagram` | an already-correct `.kikwi` from either skill above | the same graph laid out for the real canvas — a grid the model decides, edges routed and checked by `scripts/kikwi-layout.mjs`; only cosmetic fields (`layout`, `positionHandlers`, `labelPosition`, gateway `sourceHandle`, `boundaryEventIds` order) — never business/schema fields |
 | `implement-kikwi-components` | `model-kikwi-process`'s "components to implement" list (or a bare `.kikwi`'s dangling `executor`/`providerBean` refs) | real `TaskHandler`/`AnswerProvider`/`DueDateProvider`/`CorrelationKeysProvider` Java classes + unit tests — never touches the `.kikwi` |
 
 `model-kikwi-process` and `document-java-as-kikwi` are mirror images (intent → runnable process vs.

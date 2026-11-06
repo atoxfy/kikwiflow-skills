@@ -1,0 +1,11 @@
+{
+  "gapX": 150,
+  "gapY": 130,
+  "nodes": {
+    "START": [0, 0],
+    "VALIDATE": [1, 0],
+    "AWAIT_APPROVAL": [2, 0],
+    "AWAIT_FINANCE_REVIEW": [3, 1],
+    "APPROVED": [4, 0]
+  }
+}

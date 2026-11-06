@@ -193,25 +193,38 @@ Take the expense-approval file from §1 — every `layout` is still `{ "x": 0, "
 
 > "Lay out this expense-approval.kikwi file so it's readable."
 
-runs Steps 1–4 of that skill: it identifies `START → VALIDATE → AWAIT_APPROVAL → APPROVED` as the main path,
-recognizes `ESCALATE_TIMER → AWAIT_FINANCE_REVIEW` as a branch that reconverges on `APPROVED`, sizes each
-node by family (`AWAIT_APPROVAL` is an `EXTERNAL_TASK` — 300px wide, +35px taller for the boundary timer
-badge it now carries), and places the branch on its own row below the main line so it doesn't collide with
-it. It changes **only** `layout` — every `executor`, `providerType`, `attachedToRef`, and `errorCode` from §1
-is byte-for-byte unchanged.
+runs that skill's loop. It reads the graph (Step 1): `START → VALIDATE → AWAIT_APPROVAL → APPROVED` is the
+main path, and `ESCALATE_TIMER → AWAIT_FINANCE_REVIEW` is an interrupt that rejoins at `APPROVED`. It writes
+a grid — the only part that needs judgment (Step 3) — main path on row 0, the escalation below, in the
+column between the approval and the end:
+
+```json
+{ "gapX": 150, "gapY": 130,
+  "nodes": { "START": [0, 0], "VALIDATE": [1, 0], "AWAIT_APPROVAL": [2, 0],
+             "AWAIT_FINANCE_REVIEW": [3, 1], "APPROVED": [4, 0] } }
+```
+
+and runs `node scripts/kikwi-layout.mjs expense-approval.kikwi grid.json out.kikwi` (Step 4). The script
+turns the grid into pixels with the canvas's measured geometry — rows aligned on the input handles (a card's
+handle is 32px below its top, an event's 20px), the timer's edge leaving from its own row inside
+`AWAIT_APPROVAL` — routes each edge around the cards, and reports
+`{ "crossings": 0, "problems": [] }`. It changes **only** cosmetic fields — every `executor`,
+`providerType`, `attachedToRef` and `errorCode` from §1 is byte-for-byte unchanged.
 
 | Node | Before (§1) | After |
 |---|---|---|
-| `START` | `{x:0, y:0}` | `{x:0, y:300}` |
-| `VALIDATE` | `{x:0, y:0}` | `{x:350, y:300}` |
-| `AWAIT_APPROVAL` | `{x:0, y:0}` | `{x:850, y:300}` |
-| `AWAIT_FINANCE_REVIEW` | `{x:0, y:0}` | `{x:850, y:600}` — its own row, reconverging at `APPROVED` |
-| `APPROVED` | `{x:0, y:0}` | `{x:1350, y:300}` — back on the main line |
+| `START` | `{x:0, y:0}` | `{x:20, y:-20}` — its handle on the main line (y = 0) |
+| `VALIDATE` | `{x:0, y:0}` | `{x:229, y:-32}` |
+| `AWAIT_APPROVAL` | `{x:0, y:0}` | `{x:679, y:-32}` — taller now: the timer is a row inside it |
+| `AWAIT_FINANCE_REVIEW` | `{x:0, y:0}` | `{x:1129, y:234}` — its own row, below |
+| `APPROVED` | `{x:0, y:0}` | `{x:1595, y:-20}` — back on the main line |
 
-Full result: [`skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json`](skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json).
+The two bent edges also get `positionHandlers` (their corners), so the canvas draws exactly the routed
+path. Full result: [`skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json`](skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json)
+(grid: [`expense-approval.grid.json`](skills/beautify-kikwi-diagram/examples/expense-approval.grid.json)).
 This is also the answer to "why not just ask one skill to do both at once": getting node types/attachments
-right and getting pixel placement right are different kinds of reasoning, and the split keeps the coordinates
-above from being derived by guesswork mixed into the same pass as the graph logic.
+right and getting the drawing right are different kinds of work — and the drawing part needs the canvas's
+real numbers and a check, not guesswork.
 
 ---
 

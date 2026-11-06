@@ -13,10 +13,20 @@
       "commitBefore": false,
       "commitAfter": false,
       "outgoing": [
-        { "id": "flow-1", "name": "", "description": "", "targetNodeId": "VALIDATE", "isDefault": false, "handlesNull": false }
+        {
+          "id": "flow-1",
+          "name": "",
+          "description": "",
+          "targetNodeId": "VALIDATE",
+          "isDefault": false,
+          "handlesNull": false
+        }
       ],
       "extensionProperties": {},
-      "layout": { "x": 0, "y": 300 }
+      "layout": {
+        "x": 20,
+        "y": -20
+      }
     },
     "VALIDATE": {
       "id": "VALIDATE",
@@ -27,10 +37,20 @@
       "commitBefore": false,
       "commitAfter": false,
       "outgoing": [
-        { "id": "flow-2", "name": "", "description": "", "targetNodeId": "AWAIT_APPROVAL", "isDefault": false, "handlesNull": false }
+        {
+          "id": "flow-2",
+          "name": "",
+          "description": "",
+          "targetNodeId": "AWAIT_APPROVAL",
+          "isDefault": false,
+          "handlesNull": false
+        }
       ],
       "extensionProperties": {},
-      "layout": { "x": 350, "y": 300 }
+      "layout": {
+        "x": 229,
+        "y": -32
+      }
     },
     "AWAIT_APPROVAL": {
       "id": "AWAIT_APPROVAL",
@@ -40,11 +60,23 @@
       "commitBefore": true,
       "commitAfter": false,
       "outgoing": [
-        { "id": "flow-3", "name": "", "description": "", "targetNodeId": "APPROVED", "isDefault": false, "handlesNull": false }
+        {
+          "id": "flow-3",
+          "name": "",
+          "description": "",
+          "targetNodeId": "APPROVED",
+          "isDefault": false,
+          "handlesNull": false
+        }
       ],
-      "boundaryEventIds": ["ESCALATE_TIMER"],
+      "boundaryEventIds": [
+        "ESCALATE_TIMER"
+      ],
       "extensionProperties": {},
-      "layout": { "x": 850, "y": 300 }
+      "layout": {
+        "x": 679,
+        "y": -32
+      }
     },
     "ESCALATE_TIMER": {
       "id": "ESCALATE_TIMER",
@@ -57,10 +89,30 @@
       "commitBefore": false,
       "commitAfter": false,
       "outgoing": [
-        { "id": "flow-4", "name": "", "description": "", "targetNodeId": "AWAIT_FINANCE_REVIEW", "isDefault": false, "handlesNull": false }
+        {
+          "id": "flow-4",
+          "name": "",
+          "description": "",
+          "targetNodeId": "AWAIT_FINANCE_REVIEW",
+          "isDefault": false,
+          "handlesNull": false,
+          "positionHandlers": [
+            {
+              "x": 1106,
+              "y": 86
+            },
+            {
+              "x": 1106,
+              "y": 266
+            }
+          ]
+        }
       ],
       "extensionProperties": {},
-      "layout": { "x": 850, "y": 300 }
+      "layout": {
+        "x": 850,
+        "y": 300
+      }
     },
     "AWAIT_FINANCE_REVIEW": {
       "id": "AWAIT_FINANCE_REVIEW",
@@ -70,10 +122,30 @@
       "commitBefore": false,
       "commitAfter": false,
       "outgoing": [
-        { "id": "flow-5", "name": "", "description": "", "targetNodeId": "APPROVED", "isDefault": false, "handlesNull": false }
+        {
+          "id": "flow-5",
+          "name": "",
+          "description": "",
+          "targetNodeId": "APPROVED",
+          "isDefault": false,
+          "handlesNull": false,
+          "positionHandlers": [
+            {
+              "x": 1548,
+              "y": 266
+            },
+            {
+              "x": 1548,
+              "y": 0
+            }
+          ]
+        }
       ],
       "extensionProperties": {},
-      "layout": { "x": 850, "y": 600 }
+      "layout": {
+        "x": 1129,
+        "y": 234
+      }
     },
     "APPROVED": {
       "id": "APPROVED",
@@ -84,7 +156,10 @@
       "commitAfter": false,
       "outgoing": [],
       "extensionProperties": {},
-      "layout": { "x": 1350, "y": 300 }
+      "layout": {
+        "x": 1595,
+        "y": -20
+      }
     }
   },
   "extensionProperties": {}

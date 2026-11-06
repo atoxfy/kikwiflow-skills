@@ -201,26 +201,38 @@ arquivo para a `beautify-kikwi-diagram` com um prompt como:
 
 > "Organize o layout desse expense-approval.kikwi para que fique legível."
 
-roda os Steps 1–4 dessa skill: ela identifica `START → VALIDATE → AWAIT_APPROVAL → APPROVED` como o caminho
-principal, reconhece `ESCALATE_TIMER → AWAIT_FINANCE_REVIEW` como um ramo que reconverge em `APPROVED`,
-dimensiona cada nó por família (`AWAIT_APPROVAL` é um `EXTERNAL_TASK` — 300px de largura, +35px mais alto
-pelo badge do timer de boundary que agora carrega), e posiciona o ramo em sua própria linha abaixo da linha
-principal para não colidir com ela. Ela muda **apenas** o `layout` — todo `executor`, `providerType`,
-`attachedToRef` e `errorCode` da §1 permanece idêntico, byte a byte.
+roda o ciclo dessa skill. Ela lê o grafo (Step 1): `START → VALIDATE → AWAIT_APPROVAL → APPROVED` é o caminho
+principal, e `ESCALATE_TIMER → AWAIT_FINANCE_REVIEW` é uma interrupção que volta em `APPROVED`. Escreve uma
+grade — a única parte que pede julgamento (Step 3) — com o caminho principal na linha 0 e a escalada abaixo,
+na coluna entre a aprovação e o fim:
+
+```json
+{ "gapX": 150, "gapY": 130,
+  "nodes": { "START": [0, 0], "VALIDATE": [1, 0], "AWAIT_APPROVAL": [2, 0],
+             "AWAIT_FINANCE_REVIEW": [3, 1], "APPROVED": [4, 0] } }
+```
+
+e roda `node scripts/kikwi-layout.mjs expense-approval.kikwi grid.json out.kikwi` (Step 4). O script converte
+a grade em pixels com a geometria medida do canvas — linhas alinhadas pelos pontos de entrada (o de um cartão
+fica 32px abaixo do topo, o de um evento 20px), a linha do timer saindo da própria fileira dentro de
+`AWAIT_APPROVAL` —, roteia cada linha em volta dos cartões e relata `{ "crossings": 0, "problems": [] }`.
+Ela muda **apenas** campos cosméticos — todo `executor`, `providerType`, `attachedToRef` e `errorCode` da §1
+permanece idêntico, byte a byte.
 
 | Nó | Antes (§1) | Depois |
 |---|---|---|
-| `START` | `{x:0, y:0}` | `{x:0, y:300}` |
-| `VALIDATE` | `{x:0, y:0}` | `{x:350, y:300}` |
-| `AWAIT_APPROVAL` | `{x:0, y:0}` | `{x:850, y:300}` |
-| `AWAIT_FINANCE_REVIEW` | `{x:0, y:0}` | `{x:850, y:600}` — linha própria, reconvergindo em `APPROVED` |
-| `APPROVED` | `{x:0, y:0}` | `{x:1350, y:300}` — de volta à linha principal |
+| `START` | `{x:0, y:0}` | `{x:20, y:-20}` — o ponto de saída na linha principal (y = 0) |
+| `VALIDATE` | `{x:0, y:0}` | `{x:229, y:-32}` |
+| `AWAIT_APPROVAL` | `{x:0, y:0}` | `{x:679, y:-32}` — mais alto agora: o timer é uma fileira dentro dele |
+| `AWAIT_FINANCE_REVIEW` | `{x:0, y:0}` | `{x:1129, y:234}` — linha própria, abaixo |
+| `APPROVED` | `{x:0, y:0}` | `{x:1595, y:-20}` — de volta à linha principal |
 
-Resultado completo: [`skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json`](skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json).
+As duas linhas com dobra também ganham `positionHandlers` (os cantos), para o canvas desenhar exatamente o
+caminho roteado. Resultado completo: [`skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json`](skills/beautify-kikwi-diagram/examples/expense-approval.beautified.kikwi.json)
+(grade: [`expense-approval.grid.json`](skills/beautify-kikwi-diagram/examples/expense-approval.grid.json)).
 Essa é também a resposta para "por que não pedir para uma única skill fazer as duas coisas de uma vez":
-acertar os tipos de nó/anexações e acertar o posicionamento em pixels são tipos diferentes de raciocínio, e a
-separação evita que as coordenadas acima sejam derivadas por tentativa e erro misturado com a mesma passada
-da lógica do grafo.
+acertar os tipos de nó/anexações e acertar o desenho são trabalhos diferentes — e o desenho precisa dos
+números reais do canvas e de uma conferência, não de tentativa e erro.
 
 ---
 
